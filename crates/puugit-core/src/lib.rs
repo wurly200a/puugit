@@ -1,8 +1,10 @@
 pub mod config;
 pub mod error;
+pub mod repo_status;
 
 pub use config::{LocalConfig, ReposConfig};
 pub use error::{Error, Result};
+pub use repo_status::{get_repo_status, RepoStatus, RepoStatusError, UnpushedBranch};
 
 #[cfg(test)]
 mod tests {
