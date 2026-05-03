@@ -100,6 +100,14 @@ impl eframe::App for PuugitApp {
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                if ui.button("Accounts").clicked() {
+                    self.account_window.open = true;
+                }
+                if ui.button("Subscriptions").clicked() {
+                    self.subscription_window.open = true;
+                }
+            });
+            ui.horizontal(|ui| {
                 egui::ComboBox::from_label("")
                     .selected_text(
                         self.subscriptions
@@ -112,12 +120,6 @@ impl eframe::App for PuugitApp {
                             ui.selectable_value(&mut self.selected_subscription, i, &sub.name);
                         }
                     });
-                if ui.button("Accounts").clicked() {
-                    self.account_window.open = true;
-                }
-                if ui.button("Subscriptions").clicked() {
-                    self.subscription_window.open = true;
-                }
             });
         });
 
