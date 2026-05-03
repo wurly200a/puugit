@@ -76,28 +76,33 @@ mod tests {
                     name: "personal".to_string(),
                     host: "github.com".to_string(),
                     username: "wurly-personal".to_string(),
+                    ssh_host_alias: None,
                 },
                 Account {
                     name: "work".to_string(),
                     host: "github.com".to_string(),
                     username: "wurly-work".to_string(),
+                    ssh_host_alias: None,
                 },
             ],
             tree: vec![TreeNode {
                 name: "music".to_string(),
                 url: None,
                 account: None,
+                local_path: None,
                 children: vec![
                     TreeNode {
                         name: "xdx-rs".to_string(),
                         url: Some("git@github.com:wurly/xdx-rs.git".to_string()),
                         account: Some("personal".to_string()),
+                        local_path: None,
                         children: vec![],
                     },
                     TreeNode {
                         name: "some-synth".to_string(),
                         url: Some("git@github.com:wurly/some-synth.git".to_string()),
                         account: Some("personal".to_string()),
+                        local_path: None,
                         children: vec![],
                     },
                 ],

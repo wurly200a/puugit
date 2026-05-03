@@ -3,7 +3,23 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use std::env;
+
 use crate::error::{Error, Result};
+
+/// Resolves the base config directory in priority order:
+/// 1. $XDG_CONFIG_HOME
+/// 2. $HOME/.config  (respects a custom HOME even on Windows)
+/// 3. dirs::config_dir() fallback (AppData\Roaming on Windows)
+fn config_base_dir() -> Option<PathBuf> {
+    if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(xdg));
+    }
+    if let Ok(home) = env::var("HOME") {
+        return Some(PathBuf::from(home).join(".config"));
+    }
+    dirs::config_dir()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Subscription {
@@ -54,7 +70,7 @@ impl LocalConfig {
     }
 
     pub fn default_path() -> Result<PathBuf> {
-        let base = dirs::config_dir().ok_or(Error::ConfigDirNotFound)?;
+        let base = config_base_dir().ok_or(Error::ConfigDirNotFound)?;
         Ok(base.join("puugit").join("local.toml"))
     }
 }

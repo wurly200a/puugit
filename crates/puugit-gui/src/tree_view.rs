@@ -19,58 +19,6 @@ pub struct TreeNode {
     pub expanded: bool,
 }
 
-pub fn initial_tree() -> Vec<TreeNode> {
-    vec![
-        TreeNode {
-            name: "mi".into(),
-            kind: NodeKind::Folder,
-            expanded: true,
-            children: vec![
-                TreeNode {
-                    name: "xdx-rs".into(),
-                    kind: NodeKind::Repo {
-                        url: "git@github.com:wurly/xdx-rs.git".into(),
-                        local_path: Some(repo_path("project/mi/xdx-rs")),
-                        status: None,
-                    },
-                    expanded: false,
-                    children: vec![],
-                },
-                TreeNode {
-                    name: "puugit".into(),
-                    kind: NodeKind::Repo {
-                        url: "git@github.com:wurly200a/puugit.git".into(),
-                        local_path: Some(repo_path("puugit")),
-                        status: None,
-                    },
-                    expanded: false,
-                    children: vec![],
-                },
-                TreeNode {
-                    name: "some-synth".into(),
-                    kind: NodeKind::Repo {
-                        url: "git@github.com:wurly/some-synth.git".into(),
-                        local_path: None, // not cloned
-                        status: None,
-                    },
-                    expanded: false,
-                    children: vec![],
-                },
-            ],
-        },
-    ]
-}
-
-#[cfg(target_os = "windows")]
-fn repo_path(rel: &str) -> PathBuf {
-    PathBuf::from("D:/home/yushi").join(rel)
-}
-
-#[cfg(not(target_os = "windows"))]
-fn repo_path(rel: &str) -> PathBuf {
-    PathBuf::from("/home/yushi").join(rel)
-}
-
 pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode) {
     match &mut node.kind {
         NodeKind::Folder => {
@@ -95,12 +43,12 @@ pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode) {
                     ui.colored_label(egui::Color32::GRAY, &node.name);
                 }
 
-                match (local_path, status) {
+                match (local_path.as_ref(), status.as_ref()) {
                     (None, _) => {
                         ui.label("(not cloned)");
                     }
                     (Some(_), None) => {
-                        ui.colored_label(egui::Color32::GRAY, "(loading...)");
+                        ui.colored_label(egui::Color32::GRAY, "(status unavailable)");
                     }
                     (Some(_), Some(s)) => {
                         show_badges(ui, s);
