@@ -6,8 +6,14 @@ use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
 use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
+pub struct SubscriptionTree {
+    pub name: String,
+    pub nodes: Vec<TreeNode>,
+}
+
 pub struct PuugitApp {
-    tree: Vec<TreeNode>,
+    subscriptions: Vec<SubscriptionTree>,
+    selected_subscription: usize,
     error_message: Option<String>,
     dialog: Dialog,
     local_config: Option<puugit_core::config::LocalConfig>,
@@ -20,9 +26,10 @@ impl PuugitApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         match load_local_config() {
             Ok((path, config)) => {
-                let tree = build_tree(&config);
+                let subscriptions = build_tree(&config);
                 Self {
-                    tree,
+                    subscriptions,
+                    selected_subscription: 0,
                     error_message: None,
                     dialog: Dialog::None,
                     local_config: Some(config),
@@ -32,7 +39,8 @@ impl PuugitApp {
                 }
             }
             Err(msg) => Self {
-                tree: vec![],
+                subscriptions: vec![],
+                selected_subscription: 0,
                 error_message: Some(msg),
                 dialog: Dialog::None,
                 local_config: None,
@@ -51,7 +59,7 @@ impl eframe::App for PuugitApp {
             DialogAction::None => {}
             DialogAction::CloneSucceeded { local_path } => {
                 self.dialog = Dialog::None;
-                refresh_node(&mut self.tree, &local_path, true);
+                refresh_all(&mut self.subscriptions, &local_path, true);
             }
             DialogAction::CloneDismissed => {
                 self.dialog = Dialog::None;
@@ -61,7 +69,7 @@ impl eframe::App for PuugitApp {
                 if let Err(e) = puugit_core::git_ops::remove_repo(&local_path) {
                     eprintln!("remove_repo failed: {e}");
                 }
-                refresh_node(&mut self.tree, &local_path, false);
+                refresh_all(&mut self.subscriptions, &local_path, false);
             }
             DialogAction::DeleteCancelled => {
                 self.dialog = Dialog::None;
@@ -83,12 +91,27 @@ impl eframe::App for PuugitApp {
         }
         if needs_rebuild {
             if let Some(config) = &self.local_config {
-                self.tree = build_tree(config);
+                self.subscriptions = build_tree(config);
+                if self.selected_subscription >= self.subscriptions.len() {
+                    self.selected_subscription = 0;
+                }
             }
         }
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                egui::ComboBox::from_label("")
+                    .selected_text(
+                        self.subscriptions
+                            .get(self.selected_subscription)
+                            .map(|s| s.name.as_str())
+                            .unwrap_or("(none)"),
+                    )
+                    .show_ui(ui, |ui| {
+                        for (i, sub) in self.subscriptions.iter().enumerate() {
+                            ui.selectable_value(&mut self.selected_subscription, i, &sub.name);
+                        }
+                    });
                 if ui.button("Accounts").clicked() {
                     self.account_window.open = true;
                 }
@@ -109,8 +132,10 @@ impl eframe::App for PuugitApp {
             ui.set_enabled(!self.dialog.is_open());
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                for node in &mut self.tree {
-                    crate::tree_view::show_node(ui, node, &mut actions);
+                if let Some(sub) = self.subscriptions.get_mut(self.selected_subscription) {
+                    for node in &mut sub.nodes {
+                        crate::tree_view::show_node(ui, node, &mut actions);
+                    }
                 }
             });
 
@@ -166,6 +191,12 @@ impl PuugitApp {
     }
 }
 
+fn refresh_all(subs: &mut Vec<SubscriptionTree>, target: &Path, cloned: bool) {
+    for sub in subs.iter_mut() {
+        refresh_node(&mut sub.nodes, target, cloned);
+    }
+}
+
 fn refresh_node(nodes: &mut Vec<TreeNode>, target: &Path, cloned: bool) {
     for node in nodes.iter_mut() {
         match &mut node.kind {
@@ -184,7 +215,7 @@ fn refresh_node(nodes: &mut Vec<TreeNode>, target: &Path, cloned: bool) {
                     };
                 }
             }
-            NodeKind::Folder | NodeKind::Subscription => {
+            NodeKind::Folder => {
                 refresh_node(&mut node.children, target, cloned);
             }
         }
@@ -207,10 +238,10 @@ fn load_local_config() -> Result<(PathBuf, puugit_core::config::LocalConfig), St
     Ok((path, config))
 }
 
-fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
+fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree> {
     use puugit_core::config::resolve;
 
-    let mut top_nodes: Vec<TreeNode> = Vec::new();
+    let mut result: Vec<SubscriptionTree> = Vec::new();
 
     for sub in &local.subscriptions {
         let base_clone_dir = resolve::expand_tilde(&sub.base_clone_dir);
@@ -284,13 +315,11 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
             });
         }
 
-        top_nodes.push(TreeNode {
+        result.push(SubscriptionTree {
             name: sub.name.clone(),
-            kind: NodeKind::Subscription,
-            children: folder_nodes,
-            expanded: true,
+            nodes: folder_nodes,
         });
     }
 
-    top_nodes
+    result
 }

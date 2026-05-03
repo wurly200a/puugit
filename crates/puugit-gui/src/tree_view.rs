@@ -2,9 +2,7 @@ use std::path::PathBuf;
 
 use puugit_core::repo_status::RepoStatus;
 
-#[allow(dead_code)]
 pub enum NodeKind {
-    Subscription,
     Folder,
     Repo {
         url: String,
@@ -35,15 +33,6 @@ pub enum NodeAction {
 
 pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeAction>) {
     match &mut node.kind {
-        NodeKind::Subscription => {
-            egui::CollapsingHeader::new(format!("[S] {}", node.name))
-                .default_open(node.expanded)
-                .show(ui, |ui| {
-                    for child in &mut node.children {
-                        show_node(ui, child, actions);
-                    }
-                });
-        }
         NodeKind::Folder => {
             egui::CollapsingHeader::new(&node.name)
                 .default_open(node.expanded)
