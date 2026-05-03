@@ -33,18 +33,21 @@ mod tests {
 
         let original = LocalConfig {
             machine_id: "win-main".to_string(),
-            base_clone_dir: "D:/home/wurly/repos".to_string(),
             account_keys,
             subscriptions: vec![
                 Subscription {
                     name: "private".to_string(),
                     config_repo: "git@github.com:wurly/puugit-private.git".to_string(),
+                    account: "personal".to_string(),
                     local_path: "~/.config/puugit/subscriptions/private".to_string(),
+                    base_clone_dir: "D:/home/wurly/projects/private".to_string(),
                 },
                 Subscription {
                     name: "work".to_string(),
                     config_repo: "git@github.com:wurly-work/puugit-work.git".to_string(),
+                    account: "work".to_string(),
                     local_path: "~/.config/puugit/subscriptions/work".to_string(),
+                    base_clone_dir: "D:/home/wurly/projects/work".to_string(),
                 },
             ],
         };

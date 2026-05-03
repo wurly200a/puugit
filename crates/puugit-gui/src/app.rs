@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use crate::account_view::AccountWindow;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
+use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
 pub struct PuugitApp {
@@ -12,6 +13,7 @@ pub struct PuugitApp {
     local_config: Option<puugit_core::config::LocalConfig>,
     local_config_path: Option<PathBuf>,
     account_window: AccountWindow,
+    subscription_window: SubscriptionWindow,
 }
 
 impl PuugitApp {
@@ -26,6 +28,7 @@ impl PuugitApp {
                     local_config: Some(config),
                     local_config_path: Some(path),
                     account_window: AccountWindow::new(),
+                    subscription_window: SubscriptionWindow::new(),
                 }
             }
             Err(msg) => Self {
@@ -35,6 +38,7 @@ impl PuugitApp {
                 local_config: None,
                 local_config_path: None,
                 account_window: AccountWindow::new(),
+                subscription_window: SubscriptionWindow::new(),
             },
         }
     }
@@ -64,11 +68,16 @@ impl eframe::App for PuugitApp {
             }
         }
 
-        // Account window — show first so it can be open alongside the main panel
         let config_path = self.local_config_path.clone();
         let mut needs_rebuild = false;
-        if let (Some(config), Some(path)) = (&mut self.local_config, config_path) {
+
+        if let (Some(config), Some(path)) = (&mut self.local_config, config_path.clone()) {
             if self.account_window.show(ctx, config, &path) {
+                needs_rebuild = true;
+            }
+        }
+        if let (Some(config), Some(path)) = (&mut self.local_config, config_path) {
+            if self.subscription_window.show(ctx, config, &path) {
                 needs_rebuild = true;
             }
         }
@@ -82,6 +91,9 @@ impl eframe::App for PuugitApp {
             ui.horizontal(|ui| {
                 if ui.button("Accounts").clicked() {
                     self.account_window.open = true;
+                }
+                if ui.button("Subscriptions").clicked() {
+                    self.subscription_window.open = true;
                 }
             });
         });
@@ -172,7 +184,7 @@ fn refresh_node(nodes: &mut Vec<TreeNode>, target: &Path, cloned: bool) {
                     };
                 }
             }
-            NodeKind::Folder => {
+            NodeKind::Folder | NodeKind::Subscription => {
                 refresh_node(&mut node.children, target, cloned);
             }
         }
@@ -198,10 +210,10 @@ fn load_local_config() -> Result<(PathBuf, puugit_core::config::LocalConfig), St
 fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
     use puugit_core::config::resolve;
 
-    let base_clone_dir = resolve::expand_tilde(&local.base_clone_dir);
     let mut top_nodes: Vec<TreeNode> = Vec::new();
 
     for sub in &local.subscriptions {
+        let base_clone_dir = resolve::expand_tilde(&sub.base_clone_dir);
         let sub_dir = resolve::expand_tilde(&sub.local_path);
         let repos_toml = sub_dir.join("repos.toml");
 
@@ -224,6 +236,8 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
                 continue;
             }
         };
+
+        let mut folder_nodes: Vec<TreeNode> = Vec::new();
 
         for tree_group in &repos.tree {
             let mut children: Vec<TreeNode> = Vec::new();
@@ -262,13 +276,20 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
                 });
             }
 
-            top_nodes.push(TreeNode {
+            folder_nodes.push(TreeNode {
                 name: tree_group.name.clone(),
                 kind: NodeKind::Folder,
                 children,
                 expanded: true,
             });
         }
+
+        top_nodes.push(TreeNode {
+            name: sub.name.clone(),
+            kind: NodeKind::Subscription,
+            children: folder_nodes,
+            expanded: true,
+        });
     }
 
     top_nodes

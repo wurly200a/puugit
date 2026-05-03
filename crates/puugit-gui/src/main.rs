@@ -1,6 +1,7 @@
 mod account_view;
 mod app;
 mod dialog;
+mod subscription_view;
 mod tree_view;
 
 fn main() -> eframe::Result<()> {

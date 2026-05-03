@@ -45,6 +45,26 @@ pub fn resolve_clone_url(
     url.to_string()
 }
 
+/// Resolves the SSH host alias for a subscription's config_repo URL.
+/// Equivalent to resolve_clone_url but without needing the accounts list.
+pub fn resolve_config_repo_url(
+    config_repo: &str,
+    account_name: &str,
+    account_keys: &HashMap<String, String>,
+) -> String {
+    let alias = match account_keys.get(account_name) {
+        Some(a) => a.as_str(),
+        None => return config_repo.to_string(),
+    };
+
+    if let Some(rest) = config_repo.strip_prefix("git@") {
+        if let Some(colon_pos) = rest.find(':') {
+            return format!("git@{}:{}", alias, &rest[colon_pos + 1..]);
+        }
+    }
+    config_repo.to_string()
+}
+
 pub fn resolve_local_path(repo_name: &str, tree_name: &str, base_clone_dir: &Path) -> PathBuf {
     base_clone_dir.join(tree_name).join(repo_name)
 }
