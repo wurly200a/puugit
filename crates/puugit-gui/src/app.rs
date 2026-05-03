@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::account_view::AccountWindow;
+use crate::add_repo_dialog::AddRepoDialog;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
 use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
@@ -9,6 +10,8 @@ use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 pub struct SubscriptionTree {
     pub name: String,
     pub nodes: Vec<TreeNode>,
+    pub repos: puugit_core::config::ReposConfig,
+    pub repos_toml_path: PathBuf,
 }
 
 pub struct PuugitApp {
@@ -20,6 +23,7 @@ pub struct PuugitApp {
     local_config_path: Option<PathBuf>,
     account_window: AccountWindow,
     subscription_window: SubscriptionWindow,
+    add_repo_dialog: AddRepoDialog,
 }
 
 impl PuugitApp {
@@ -36,6 +40,7 @@ impl PuugitApp {
                     local_config_path: Some(path),
                     account_window: AccountWindow::new(),
                     subscription_window: SubscriptionWindow::new(),
+                    add_repo_dialog: AddRepoDialog::new(),
                 }
             }
             Err(msg) => Self {
@@ -47,6 +52,7 @@ impl PuugitApp {
                 local_config_path: None,
                 account_window: AccountWindow::new(),
                 subscription_window: SubscriptionWindow::new(),
+                add_repo_dialog: AddRepoDialog::new(),
             },
         }
     }
@@ -89,6 +95,15 @@ impl eframe::App for PuugitApp {
                 needs_rebuild = true;
             }
         }
+        let selected = self.selected_subscription;
+        let add_repo_dialog = &mut self.add_repo_dialog;
+        let subscriptions = &mut self.subscriptions;
+        if let Some(sub) = subscriptions.get_mut(selected) {
+            if add_repo_dialog.show(ctx, &mut sub.repos, &sub.repos_toml_path) {
+                needs_rebuild = true;
+            }
+        }
+
         if needs_rebuild {
             if let Some(config) = &self.local_config {
                 self.subscriptions = build_tree(config);
@@ -120,6 +135,9 @@ impl eframe::App for PuugitApp {
                             ui.selectable_value(&mut self.selected_subscription, i, &sub.name);
                         }
                     });
+                if ui.button("Add Repo").clicked() {
+                    self.add_repo_dialog.open = true;
+                }
             });
         });
 
@@ -320,6 +338,8 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree>
         result.push(SubscriptionTree {
             name: sub.name.clone(),
             nodes: folder_nodes,
+            repos,
+            repos_toml_path: repos_toml,
         });
     }
 

@@ -1,4 +1,5 @@
 mod account_view;
+mod add_repo_dialog;
 mod app;
 mod dialog;
 mod subscription_view;
