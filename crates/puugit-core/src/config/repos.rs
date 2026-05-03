@@ -9,8 +9,6 @@ pub struct Account {
     pub name: String,
     pub host: String,
     pub username: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ssh_host_alias: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

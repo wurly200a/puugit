@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::repos::Account;
@@ -22,18 +23,20 @@ pub fn expand_tilde(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-/// Replaces the host in a `git@host:...` URL with the account's ssh_host_alias when set.
-pub fn resolve_clone_url(url: &str, account_name: &str, accounts: &[Account]) -> String {
-    let alias = accounts
-        .iter()
-        .find(|a| a.name == account_name)
-        .and_then(|a| a.ssh_host_alias.as_deref());
-
-    let Some(alias) = alias else {
-        return url.to_string();
+/// Replaces the host in a `git@host:...` URL with the SSH host alias for the account.
+/// The alias comes from `account_keys[account_name]` in local.toml.
+/// `_accounts` is kept for future host-verification use.
+pub fn resolve_clone_url(
+    url: &str,
+    account_name: &str,
+    account_keys: &HashMap<String, String>,
+    _accounts: &[Account],
+) -> String {
+    let alias = match account_keys.get(account_name) {
+        Some(a) => a.as_str(),
+        None => return url.to_string(),
     };
 
-    // Match "git@<host>:<path>" and replace <host> with alias
     if let Some(rest) = url.strip_prefix("git@") {
         if let Some(colon_pos) = rest.find(':') {
             return format!("git@{}:{}", alias, &rest[colon_pos + 1..]);

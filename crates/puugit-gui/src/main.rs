@@ -1,3 +1,4 @@
+mod account_view;
 mod app;
 mod dialog;
 mod tree_view;

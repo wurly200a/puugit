@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::account_view::AccountWindow;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
@@ -8,20 +9,32 @@ pub struct PuugitApp {
     tree: Vec<TreeNode>,
     error_message: Option<String>,
     dialog: Dialog,
+    local_config: Option<puugit_core::config::LocalConfig>,
+    local_config_path: Option<PathBuf>,
+    account_window: AccountWindow,
 }
 
 impl PuugitApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        match build_tree() {
-            Ok(tree) => Self {
-                tree,
-                error_message: None,
-                dialog: Dialog::None,
-            },
+        match load_local_config() {
+            Ok((path, config)) => {
+                let tree = build_tree(&config);
+                Self {
+                    tree,
+                    error_message: None,
+                    dialog: Dialog::None,
+                    local_config: Some(config),
+                    local_config_path: Some(path),
+                    account_window: AccountWindow::new(),
+                }
+            }
             Err(msg) => Self {
                 tree: vec![],
                 error_message: Some(msg),
                 dialog: Dialog::None,
+                local_config: None,
+                local_config_path: None,
+                account_window: AccountWindow::new(),
             },
         }
     }
@@ -50,6 +63,28 @@ impl eframe::App for PuugitApp {
                 self.dialog = Dialog::None;
             }
         }
+
+        // Account window — show first so it can be open alongside the main panel
+        let config_path = self.local_config_path.clone();
+        let mut needs_rebuild = false;
+        if let (Some(config), Some(path)) = (&mut self.local_config, config_path) {
+            if self.account_window.show(ctx, config, &path) {
+                needs_rebuild = true;
+            }
+        }
+        if needs_rebuild {
+            if let Some(config) = &self.local_config {
+                self.tree = build_tree(config);
+            }
+        }
+
+        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Accounts").clicked() {
+                    self.account_window.open = true;
+                }
+            });
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(msg) = &self.error_message {
@@ -144,23 +179,26 @@ fn refresh_node(nodes: &mut Vec<TreeNode>, target: &Path, cloned: bool) {
     }
 }
 
-fn build_tree() -> Result<Vec<TreeNode>, String> {
-    use puugit_core::config::resolve;
-
-    let local_path = puugit_core::config::LocalConfig::default_path()
+fn load_local_config() -> Result<(PathBuf, puugit_core::config::LocalConfig), String> {
+    let path = puugit_core::config::LocalConfig::default_path()
         .map_err(|e| format!("Failed to resolve config path: {e}"))?;
 
-    if !local_path.exists() {
+    if !path.exists() {
         return Err(
             "No configuration found. Please create ~/.config/puugit/local.toml".to_string(),
         );
     }
 
-    let local = puugit_core::config::LocalConfig::load(&local_path)
+    let config = puugit_core::config::LocalConfig::load(&path)
         .map_err(|e| format!("Failed to load local.toml: {e}"))?;
 
-    let base_clone_dir = resolve::expand_tilde(&local.base_clone_dir);
+    Ok((path, config))
+}
 
+fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<TreeNode> {
+    use puugit_core::config::resolve;
+
+    let base_clone_dir = resolve::expand_tilde(&local.base_clone_dir);
     let mut top_nodes: Vec<TreeNode> = Vec::new();
 
     for sub in &local.subscriptions {
@@ -198,6 +236,7 @@ fn build_tree() -> Result<Vec<TreeNode>, String> {
                     Some(acc) => resolve::resolve_clone_url(
                         child.url.as_deref().unwrap_or(""),
                         acc,
+                        &local.account_keys,
                         &repos.accounts,
                     ),
                     None => child.url.clone().unwrap_or_default(),
@@ -232,5 +271,5 @@ fn build_tree() -> Result<Vec<TreeNode>, String> {
         }
     }
 
-    Ok(top_nodes)
+    top_nodes
 }
