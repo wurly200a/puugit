@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::repos::{Account, TreeNode};
+use super::repos::Account;
 
 /// Resolves home directory: $HOME env var first, then dirs::home_dir().
 fn home_dir() -> Option<PathBuf> {
@@ -42,18 +42,13 @@ pub fn resolve_clone_url(url: &str, account_name: &str, accounts: &[Account]) ->
     url.to_string()
 }
 
-pub fn resolve_local_path(child: &TreeNode, tree_name: &str, base_clone_dir: &Path) -> PathBuf {
-    if let Some(path) = &child.local_path {
-        expand_tilde(path)
-    } else {
-        base_clone_dir.join(tree_name).join(&child.name)
-    }
+pub fn resolve_local_path(repo_name: &str, tree_name: &str, base_clone_dir: &Path) -> PathBuf {
+    base_clone_dir.join(tree_name).join(repo_name)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::repos::TreeNode;
     use std::path::PathBuf;
 
     #[test]
@@ -73,28 +68,8 @@ mod tests {
     }
 
     #[test]
-    fn resolve_local_path_explicit() {
-        let child = TreeNode {
-            name: "repo".into(),
-            url: None,
-            account: None,
-            local_path: Some("/explicit/path".into()),
-            children: vec![],
-        };
-        let result = resolve_local_path(&child, "group", Path::new("/base"));
-        assert_eq!(result, PathBuf::from("/explicit/path"));
-    }
-
-    #[test]
     fn resolve_local_path_default() {
-        let child = TreeNode {
-            name: "myrepo".into(),
-            url: None,
-            account: None,
-            local_path: None,
-            children: vec![],
-        };
-        let result = resolve_local_path(&child, "group", Path::new("/base"));
+        let result = resolve_local_path("myrepo", "group", Path::new("/base"));
         assert_eq!(result, PathBuf::from("/base/group/myrepo"));
     }
 }

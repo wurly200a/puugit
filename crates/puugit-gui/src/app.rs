@@ -192,7 +192,7 @@ fn build_tree() -> Result<Vec<TreeNode>, String> {
 
             for child in &tree_group.children {
                 let repo_path =
-                    resolve::resolve_local_path(child, &tree_group.name, &base_clone_dir);
+                    resolve::resolve_local_path(&child.name, &tree_group.name, &base_clone_dir);
 
                 let url = match &child.account {
                     Some(acc) => resolve::resolve_clone_url(

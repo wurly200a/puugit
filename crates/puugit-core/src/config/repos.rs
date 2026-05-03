@@ -20,8 +20,6 @@ pub struct TreeNode {
     pub url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local_path: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<TreeNode>,
 }

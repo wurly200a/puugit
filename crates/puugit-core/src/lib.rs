@@ -84,20 +84,17 @@ mod tests {
                 name: "music".to_string(),
                 url: None,
                 account: None,
-                local_path: None,
                 children: vec![
                     TreeNode {
                         name: "xdx-rs".to_string(),
                         url: Some("git@github.com:wurly/xdx-rs.git".to_string()),
                         account: Some("personal".to_string()),
-                        local_path: None,
                         children: vec![],
                     },
                     TreeNode {
                         name: "some-synth".to_string(),
                         url: Some("git@github.com:wurly/some-synth.git".to_string()),
                         account: Some("personal".to_string()),
-                        local_path: None,
                         children: vec![],
                     },
                 ],
