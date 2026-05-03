@@ -1,4 +1,5 @@
 mod app;
+mod dialog;
 mod tree_view;
 
 fn main() -> eframe::Result<()> {

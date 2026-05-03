@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -33,8 +32,6 @@ pub struct LocalConfig {
     pub machine_id: String,
     pub base_clone_dir: String,
     #[serde(default)]
-    pub account_keys: HashMap<String, String>,
-    #[serde(default)]
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -43,7 +40,6 @@ impl Default for LocalConfig {
         Self {
             machine_id: String::new(),
             base_clone_dir: String::new(),
-            account_keys: HashMap::new(),
             subscriptions: Vec::new(),
         }
     }

@@ -1,5 +1,6 @@
 pub mod config;
 pub mod error;
+pub mod git_ops;
 pub mod repo_status;
 
 pub use config::{LocalConfig, ReposConfig};
@@ -11,7 +12,6 @@ mod tests {
     use super::*;
     use config::local::Subscription;
     use config::repos::{Account, TreeNode};
-    use std::collections::HashMap;
     use tempfile::TempDir;
 
     fn temp_path(dir: &TempDir, name: &str) -> std::path::PathBuf {
@@ -25,14 +25,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = temp_path(&dir, "local.toml");
 
-        let mut account_keys = HashMap::new();
-        account_keys.insert("personal".to_string(), "~/.ssh/id_ed25519_personal".to_string());
-        account_keys.insert("work".to_string(), "~/.ssh/id_ed25519_work".to_string());
-
         let original = LocalConfig {
             machine_id: "win-main".to_string(),
             base_clone_dir: "D:/home/wurly/repos".to_string(),
-            account_keys,
             subscriptions: vec![
                 Subscription {
                     name: "private".to_string(),
@@ -76,7 +71,7 @@ mod tests {
                     name: "personal".to_string(),
                     host: "github.com".to_string(),
                     username: "wurly-personal".to_string(),
-                    ssh_host_alias: None,
+                    ssh_host_alias: Some("github-wurly200a".to_string()),
                 },
                 Account {
                     name: "work".to_string(),

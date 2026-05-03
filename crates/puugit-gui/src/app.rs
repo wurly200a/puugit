@@ -1,8 +1,13 @@
-use crate::tree_view::{NodeKind, TreeNode};
+use std::path::Path;
+use std::time::Instant;
+
+use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
+use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
 pub struct PuugitApp {
     tree: Vec<TreeNode>,
     error_message: Option<String>,
+    dialog: Dialog,
 }
 
 impl PuugitApp {
@@ -11,10 +16,12 @@ impl PuugitApp {
             Ok(tree) => Self {
                 tree,
                 error_message: None,
+                dialog: Dialog::None,
             },
             Err(msg) => Self {
                 tree: vec![],
                 error_message: Some(msg),
+                dialog: Dialog::None,
             },
         }
     }
@@ -22,17 +29,118 @@ impl PuugitApp {
 
 impl eframe::App for PuugitApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let dialog_action = self.dialog.show(ctx);
+        match dialog_action {
+            DialogAction::None => {}
+            DialogAction::CloneSucceeded { local_path } => {
+                self.dialog = Dialog::None;
+                refresh_node(&mut self.tree, &local_path, true);
+            }
+            DialogAction::CloneDismissed => {
+                self.dialog = Dialog::None;
+            }
+            DialogAction::DeleteConfirmed { local_path } => {
+                self.dialog = Dialog::None;
+                if let Err(e) = puugit_core::git_ops::remove_repo(&local_path) {
+                    eprintln!("remove_repo failed: {e}");
+                }
+                refresh_node(&mut self.tree, &local_path, false);
+            }
+            DialogAction::DeleteCancelled => {
+                self.dialog = Dialog::None;
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(msg) = &self.error_message {
                 ui.colored_label(egui::Color32::RED, msg);
                 return;
             }
+
+            let mut actions: Vec<NodeAction> = Vec::new();
+
+            ui.set_enabled(!self.dialog.is_open());
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for node in &mut self.tree {
-                    crate::tree_view::show_node(ui, node);
+                    crate::tree_view::show_node(ui, node, &mut actions);
                 }
             });
+
+            if let Some(action) = actions.into_iter().next() {
+                if !self.dialog.is_open() {
+                    self.handle_action(action);
+                }
+            }
         });
+    }
+}
+
+impl PuugitApp {
+    fn handle_action(&mut self, action: NodeAction) {
+        match action {
+            NodeAction::Clone {
+                url,
+                local_path,
+                repo_name,
+            } => {
+                let options = puugit_core::git_ops::CloneOptions {
+                    url,
+                    local_path: local_path.clone(),
+                    timeout_secs: 60,
+                };
+                let receiver = puugit_core::git_ops::clone_repo(options);
+                self.dialog = Dialog::Cloning(CloningState {
+                    repo_name,
+                    local_path,
+                    receiver,
+                    started_at: Instant::now(),
+                    result: None,
+                });
+            }
+            NodeAction::Remove {
+                local_path,
+                repo_name,
+            } => {
+                let warnings = match puugit_core::git_ops::check_before_remove(&local_path) {
+                    Ok(r) => r.warnings,
+                    Err(e) => {
+                        eprintln!("check_before_remove failed: {e}");
+                        vec![]
+                    }
+                };
+                self.dialog = Dialog::ConfirmDelete(DeleteState {
+                    repo_name,
+                    local_path,
+                    warnings,
+                });
+            }
+        }
+    }
+}
+
+fn refresh_node(nodes: &mut Vec<TreeNode>, target: &Path, cloned: bool) {
+    for node in nodes.iter_mut() {
+        match &mut node.kind {
+            NodeKind::Repo {
+                local_path,
+                cloned: node_cloned,
+                status,
+                ..
+            } => {
+                if local_path.as_path() == target {
+                    *node_cloned = cloned;
+                    *status = if cloned {
+                        puugit_core::repo_status::get_repo_status(local_path).ok()
+                    } else {
+                        None
+                    };
+                }
+            }
+            NodeKind::Folder => {
+                refresh_node(&mut node.children, target, cloned);
+            }
+        }
     }
 }
 
@@ -83,20 +191,21 @@ fn build_tree() -> Result<Vec<TreeNode>, String> {
             let mut children: Vec<TreeNode> = Vec::new();
 
             for child in &tree_group.children {
-                let local_repo_path =
+                let repo_path =
                     resolve::resolve_local_path(child, &tree_group.name, &base_clone_dir);
 
-                let url = {
-                    let raw = child.url.as_deref().unwrap_or("");
-                    match &child.account {
-                        Some(acc) => resolve::resolve_clone_url(raw, acc, &repos.accounts),
-                        None => raw.to_string(),
-                    }
+                let url = match &child.account {
+                    Some(acc) => resolve::resolve_clone_url(
+                        child.url.as_deref().unwrap_or(""),
+                        acc,
+                        &repos.accounts,
+                    ),
+                    None => child.url.clone().unwrap_or_default(),
                 };
 
-                let cloned = local_repo_path.exists();
+                let cloned = repo_path.exists();
                 let status = if cloned {
-                    puugit_core::repo_status::get_repo_status(&local_repo_path).ok()
+                    puugit_core::repo_status::get_repo_status(&repo_path).ok()
                 } else {
                     None
                 };
@@ -105,7 +214,8 @@ fn build_tree() -> Result<Vec<TreeNode>, String> {
                     name: child.name.clone(),
                     kind: NodeKind::Repo {
                         url,
-                        local_path: if cloned { Some(local_repo_path) } else { None },
+                        local_path: repo_path,
+                        cloned,
                         status,
                     },
                     children: vec![],

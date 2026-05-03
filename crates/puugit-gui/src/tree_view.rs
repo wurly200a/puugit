@@ -7,7 +7,8 @@ pub enum NodeKind {
     Folder,
     Repo {
         url: String,
-        local_path: Option<PathBuf>,
+        local_path: PathBuf,
+        cloned: bool,
         status: Option<RepoStatus>,
     },
 }
@@ -19,42 +20,73 @@ pub struct TreeNode {
     pub expanded: bool,
 }
 
-pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode) {
+pub enum NodeAction {
+    Clone {
+        url: String,
+        local_path: PathBuf,
+        repo_name: String,
+    },
+    Remove {
+        local_path: PathBuf,
+        repo_name: String,
+    },
+}
+
+pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeAction>) {
     match &mut node.kind {
         NodeKind::Folder => {
             egui::CollapsingHeader::new(&node.name)
                 .default_open(node.expanded)
                 .show(ui, |ui| {
                     for child in &mut node.children {
-                        show_node(ui, child);
+                        show_node(ui, child, actions);
                     }
                 });
         }
         NodeKind::Repo {
-            local_path, status, ..
+            url,
+            local_path,
+            cloned,
+            status,
         } => {
-            ui.horizontal(|ui| {
-                let mut cloned = local_path.is_some();
-                ui.checkbox(&mut cloned, "");
+            let was_cloned = *cloned;
+            let mut checked = was_cloned;
 
-                if local_path.is_some() {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut checked, "");
+
+                if *cloned {
                     ui.colored_label(egui::Color32::GREEN, &node.name);
                 } else {
                     ui.colored_label(egui::Color32::GRAY, &node.name);
                 }
 
-                match (local_path.as_ref(), status.as_ref()) {
-                    (None, _) => {
-                        ui.label("(not cloned)");
+                if *cloned {
+                    match status {
+                        None => {
+                            ui.colored_label(egui::Color32::GRAY, "(status unavailable)");
+                        }
+                        Some(s) => show_badges(ui, s),
                     }
-                    (Some(_), None) => {
-                        ui.colored_label(egui::Color32::GRAY, "(status unavailable)");
-                    }
-                    (Some(_), Some(s)) => {
-                        show_badges(ui, s);
-                    }
+                } else {
+                    ui.label("(not cloned)");
                 }
             });
+
+            if checked != was_cloned {
+                if checked {
+                    actions.push(NodeAction::Clone {
+                        url: url.clone(),
+                        local_path: local_path.clone(),
+                        repo_name: node.name.clone(),
+                    });
+                } else {
+                    actions.push(NodeAction::Remove {
+                        local_path: local_path.clone(),
+                        repo_name: node.name.clone(),
+                    });
+                }
+            }
         }
     }
 }
