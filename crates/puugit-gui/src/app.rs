@@ -29,7 +29,18 @@ pub struct PuugitApp {
 }
 
 impl PuugitApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let mut style = (*cc.egui_ctx.style()).clone();
+        style.text_styles = [
+            (egui::TextStyle::Body, egui::FontId::proportional(14.0)),
+            (egui::TextStyle::Button, egui::FontId::proportional(14.0)),
+            (egui::TextStyle::Heading, egui::FontId::proportional(16.0)),
+            (egui::TextStyle::Monospace, egui::FontId::monospace(13.0)),
+            (egui::TextStyle::Small, egui::FontId::proportional(12.0)),
+        ]
+        .into();
+        cc.egui_ctx.set_style(style);
+
         match load_local_config() {
             Ok((path, config)) => {
                 let subscriptions = build_tree(&config);
@@ -64,6 +75,7 @@ impl PuugitApp {
 
 impl eframe::App for PuugitApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.set_pixels_per_point(1.0);
         let dialog_action = self.dialog.show(ctx);
         match dialog_action {
             DialogAction::None => {}
