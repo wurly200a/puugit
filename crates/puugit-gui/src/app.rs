@@ -4,6 +4,7 @@ use std::time::Instant;
 use crate::account_view::AccountWindow;
 use crate::add_repo_dialog::AddRepoDialog;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
+use crate::side_panel::SidePanel;
 use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
@@ -24,6 +25,7 @@ pub struct PuugitApp {
     account_window: AccountWindow,
     subscription_window: SubscriptionWindow,
     add_repo_dialog: AddRepoDialog,
+    side_panel: SidePanel,
 }
 
 impl PuugitApp {
@@ -41,6 +43,7 @@ impl PuugitApp {
                     account_window: AccountWindow::new(),
                     subscription_window: SubscriptionWindow::new(),
                     add_repo_dialog: AddRepoDialog::new(),
+                    side_panel: SidePanel::new(),
                 }
             }
             Err(msg) => Self {
@@ -53,6 +56,7 @@ impl PuugitApp {
                 account_window: AccountWindow::new(),
                 subscription_window: SubscriptionWindow::new(),
                 add_repo_dialog: AddRepoDialog::new(),
+                side_panel: SidePanel::new(),
             },
         }
     }
@@ -113,6 +117,8 @@ impl eframe::App for PuugitApp {
             }
         }
 
+        self.side_panel.show(ctx);
+
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Accounts").clicked() {
@@ -159,9 +165,15 @@ impl eframe::App for PuugitApp {
                 }
             });
 
-            if let Some(action) = actions.into_iter().next() {
-                if !self.dialog.is_open() {
-                    self.handle_action(action);
+            for action in actions {
+                match action {
+                    NodeAction::Select { name, local_path } => {
+                        self.side_panel.select(name, local_path);
+                    }
+                    other if !self.dialog.is_open() => {
+                        self.handle_action(other);
+                    }
+                    _ => {}
                 }
             }
         });
@@ -206,6 +218,9 @@ impl PuugitApp {
                     local_path,
                     warnings,
                 });
+            }
+            NodeAction::Select { name, local_path } => {
+                self.side_panel.select(name, local_path);
             }
         }
     }

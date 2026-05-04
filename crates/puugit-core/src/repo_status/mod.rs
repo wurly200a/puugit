@@ -19,7 +19,14 @@ pub fn get_repo_status(path: &Path) -> Result<RepoStatus, RepoStatusError> {
     let repo = Repository::open(path).map_err(|_| RepoStatusError::NotARepo(path.to_path_buf()))?;
 
     // --- file status ---
-    let (has_unstaged_changes, has_staged_changes, has_untracked_files) = {
+    let (
+        has_unstaged_changes,
+        has_staged_changes,
+        has_untracked_files,
+        unstaged_files,
+        staged_files,
+        untracked_files,
+    ) = {
         let mut opts = StatusOptions::new();
         opts.include_untracked(true).recurse_untracked_dirs(true);
         let statuses = repo.statuses(Some(&mut opts))?;
@@ -27,9 +34,13 @@ pub fn get_repo_status(path: &Path) -> Result<RepoStatus, RepoStatusError> {
         let mut unstaged = false;
         let mut staged = false;
         let mut untracked = false;
+        let mut unstaged_files: Vec<String> = Vec::new();
+        let mut staged_files: Vec<String> = Vec::new();
+        let mut untracked_files: Vec<String> = Vec::new();
 
         for entry in statuses.iter() {
             let s = entry.status();
+            let p = entry.path().unwrap_or("").to_owned();
             if s.intersects(
                 git2::Status::WT_MODIFIED
                     | git2::Status::WT_DELETED
@@ -37,6 +48,7 @@ pub fn get_repo_status(path: &Path) -> Result<RepoStatus, RepoStatusError> {
                     | git2::Status::WT_TYPECHANGE,
             ) {
                 unstaged = true;
+                unstaged_files.push(p.clone());
             }
             if s.intersects(
                 git2::Status::INDEX_NEW
@@ -46,14 +58,31 @@ pub fn get_repo_status(path: &Path) -> Result<RepoStatus, RepoStatusError> {
                     | git2::Status::INDEX_TYPECHANGE,
             ) {
                 staged = true;
+                staged_files.push(p.clone());
             }
             if s.contains(git2::Status::WT_NEW) {
                 untracked = true;
+                untracked_files.push(p);
             }
         }
-        (unstaged, staged, untracked)
+        (
+            unstaged,
+            staged,
+            untracked,
+            unstaged_files,
+            staged_files,
+            untracked_files,
+        )
         // `statuses` dropped here, releasing borrow of `repo`
     };
+
+    // --- remote ---
+    let has_remote = repo.remotes().map(|r| !r.is_empty()).unwrap_or(false);
+
+    // --- last fetch time ---
+    let last_fetch_time = std::fs::metadata(path.join(".git/FETCH_HEAD"))
+        .and_then(|m| m.modified())
+        .ok();
 
     // --- unpushed branches ---
     let mut unpushed_branches = Vec::new();
@@ -106,6 +135,11 @@ pub fn get_repo_status(path: &Path) -> Result<RepoStatus, RepoStatusError> {
         has_untracked_files,
         unpushed_branches,
         stash_count,
+        unstaged_files,
+        staged_files,
+        untracked_files,
+        has_remote,
+        last_fetch_time,
     })
 }
 

@@ -29,6 +29,10 @@ pub enum NodeAction {
         local_path: PathBuf,
         repo_name: String,
     },
+    Select {
+        name: String,
+        local_path: PathBuf,
+    },
 }
 
 pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeAction>) {
@@ -54,10 +58,20 @@ pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeA
             ui.horizontal(|ui| {
                 ui.checkbox(&mut checked, "");
 
-                if *cloned {
-                    ui.colored_label(egui::Color32::GREEN, &node.name);
+                let color = if *cloned {
+                    egui::Color32::GREEN
                 } else {
-                    ui.colored_label(egui::Color32::GRAY, &node.name);
+                    egui::Color32::GRAY
+                };
+                let name_resp = ui.add(
+                    egui::Label::new(egui::RichText::new(&node.name).color(color))
+                        .sense(egui::Sense::click()),
+                );
+                if name_resp.clicked() {
+                    actions.push(NodeAction::Select {
+                        name: node.name.clone(),
+                        local_path: local_path.clone(),
+                    });
                 }
 
                 if *cloned {

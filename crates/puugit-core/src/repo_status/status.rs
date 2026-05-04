@@ -9,6 +9,11 @@ pub struct RepoStatus {
     pub has_untracked_files: bool,
     pub unpushed_branches: Vec<UnpushedBranch>,
     pub stash_count: usize,
+    pub unstaged_files: Vec<String>,
+    pub staged_files: Vec<String>,
+    pub untracked_files: Vec<String>,
+    pub has_remote: bool,
+    pub last_fetch_time: Option<std::time::SystemTime>,
 }
 
 #[derive(Debug, Clone)]
