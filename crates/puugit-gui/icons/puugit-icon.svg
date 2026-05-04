@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="680" viewBox="0 0 680 680">
+  <rect width="680" height="680" rx="120" fill="#2D6A4F"/>
+
+  <!-- trunk -->
+  <line x1="340" y1="620" x2="340" y2="440" stroke="#95D5B2" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- main branches -->
+  <line x1="340" y1="440" x2="120" y2="260" stroke="#95D5B2" stroke-width="12" stroke-linecap="round"/>
+  <line x1="340" y1="440" x2="340" y2="220" stroke="#95D5B2" stroke-width="12" stroke-linecap="round"/>
+  <line x1="340" y1="440" x2="560" y2="260" stroke="#95D5B2" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- left sub-branches -->
+  <line x1="120" y1="260" x2="60" y2="140" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+  <line x1="120" y1="260" x2="200" y2="130" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- center sub-branches -->
+  <line x1="340" y1="220" x2="280" y2="100" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+  <line x1="340" y1="220" x2="400" y2="100" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- right sub-branches -->
+  <line x1="560" y1="260" x2="480" y2="130" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+  <line x1="560" y1="260" x2="620" y2="140" stroke="#95D5B2" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- root node -->
+  <circle cx="340" cy="620" r="34" fill="#1B4332" stroke="#D8F3DC" stroke-width="8"/>
+
+  <!-- branch node center -->
+  <circle cx="340" cy="440" r="28" fill="#1B4332" stroke="#D8F3DC" stroke-width="7"/>
+
+  <!-- mid nodes -->
+  <circle cx="120" cy="260" r="22" fill="#1B4332" stroke="#95D5B2" stroke-width="6"/>
+  <circle cx="340" cy="220" r="22" fill="#1B4332" stroke="#95D5B2" stroke-width="6"/>
+  <circle cx="560" cy="260" r="22" fill="#1B4332" stroke="#95D5B2" stroke-width="6"/>
+
+  <!-- leaf nodes -->
+  <circle cx="60"  cy="140" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+  <circle cx="200" cy="130" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+  <circle cx="280" cy="100" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+  <circle cx="400" cy="100" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+  <circle cx="480" cy="130" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+  <circle cx="620" cy="140" r="24" fill="#52B788" stroke="#D8F3DC" stroke-width="5"/>
+</svg>
