@@ -11,7 +11,7 @@ path = "src/main.rs"
 winresource = "0.1"
 
 [dependencies]
-eframe = "0.27"
+eframe = { version = "0.27", features = ["wayland", "x11"] }
 egui = "0.27"
 image = { version = "0.25", default-features = false, features = ["png"] }
 puugit-core = { path = "../puugit-core" }
