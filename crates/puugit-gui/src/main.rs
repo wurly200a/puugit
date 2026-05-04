@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod account_view;
 mod add_repo_dialog;
 mod app;
