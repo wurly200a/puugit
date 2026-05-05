@@ -32,17 +32,25 @@ pub enum NodeAction {
     Select {
         name: String,
         local_path: PathBuf,
+        repo_id: String,
     },
 }
 
-pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeAction>) {
+pub fn show_node(
+    ui: &mut egui::Ui,
+    node: &mut TreeNode,
+    actions: &mut Vec<NodeAction>,
+    selected_repo_id: &Option<String>,
+    parent_id: &str,
+) {
     match &mut node.kind {
         NodeKind::Folder => {
+            let child_parent_id = format!("{}/{}", parent_id, node.name);
             egui::CollapsingHeader::new(&node.name)
                 .default_open(node.expanded)
                 .show(ui, |ui| {
                     for child in &mut node.children {
-                        show_node(ui, child, actions);
+                        show_node(ui, child, actions, selected_repo_id, &child_parent_id);
                     }
                 });
         }
@@ -55,24 +63,22 @@ pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeA
             let was_cloned = *cloned;
             let mut checked = was_cloned;
 
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut checked, "");
+            let repo_id = format!("{}/{}", parent_id, node.name);
+            let is_selected = selected_repo_id.as_deref() == Some(repo_id.as_str());
+
+            let bg_idx = ui.painter().add(egui::Shape::Noop);
+
+            let mut content_x = 0.0_f32;
+            let inner = ui.horizontal(|ui| {
+                let cb = ui.checkbox(&mut checked, "");
+                content_x = cb.rect.max.x;
 
                 let color = if *cloned {
                     egui::Color32::GREEN
                 } else {
                     egui::Color32::GRAY
                 };
-                let name_resp = ui.add(
-                    egui::Label::new(egui::RichText::new(&node.name).color(color))
-                        .sense(egui::Sense::click()),
-                );
-                if name_resp.clicked() {
-                    actions.push(NodeAction::Select {
-                        name: node.name.clone(),
-                        local_path: local_path.clone(),
-                    });
-                }
+                ui.label(egui::RichText::new(&node.name).color(color));
 
                 if *cloned {
                     match status {
@@ -85,6 +91,48 @@ pub fn show_node(ui: &mut egui::Ui, node: &mut TreeNode, actions: &mut Vec<NodeA
                     ui.label("(not cloned)");
                 }
             });
+
+            let row_rect = inner.response.rect;
+            let content_rect = egui::Rect::from_min_max(
+                egui::pos2(content_x, row_rect.min.y),
+                row_rect.max,
+            );
+            let row_response = ui.interact(
+                content_rect,
+                ui.id().with(repo_id.as_str()),
+                egui::Sense::click(),
+            );
+
+            let bg_color = if row_response.hovered() {
+                egui::Color32::from_white_alpha(15)
+            } else {
+                egui::Color32::TRANSPARENT
+            };
+
+            ui.painter()
+                .set(bg_idx, egui::Shape::rect_filled(content_rect, 2.0, bg_color));
+
+            if is_selected {
+                ui.painter().line_segment(
+                    [
+                        egui::pos2(content_rect.min.x, content_rect.max.y - 1.0),
+                        egui::pos2(content_rect.max.x, content_rect.max.y - 1.0),
+                    ],
+                    egui::Stroke::new(0.5, egui::Color32::WHITE),
+                );
+            }
+
+            if row_response.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+
+            if row_response.clicked() {
+                actions.push(NodeAction::Select {
+                    name: node.name.clone(),
+                    local_path: local_path.clone(),
+                    repo_id,
+                });
+            }
 
             if checked != was_cloned {
                 if checked {

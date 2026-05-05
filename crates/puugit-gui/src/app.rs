@@ -18,6 +18,7 @@ pub struct SubscriptionTree {
 pub struct PuugitApp {
     subscriptions: Vec<SubscriptionTree>,
     selected_subscription: usize,
+    selected_repo_id: Option<String>,
     error_message: Option<String>,
     dialog: Dialog,
     local_config: Option<puugit_core::config::LocalConfig>,
@@ -47,6 +48,7 @@ impl PuugitApp {
                 Self {
                     subscriptions,
                     selected_subscription: 0,
+                    selected_repo_id: None,
                     error_message: None,
                     dialog: Dialog::None,
                     local_config: Some(config),
@@ -60,6 +62,7 @@ impl PuugitApp {
             Err(msg) => Self {
                 subscriptions: vec![],
                 selected_subscription: 0,
+                selected_repo_id: None,
                 error_message: Some(msg),
                 dialog: Dialog::None,
                 local_config: None,
@@ -168,6 +171,7 @@ impl eframe::App for PuugitApp {
                         }
                     }
                     self.side_panel.selected_repo = None;
+                    self.selected_repo_id = None;
                 }
             });
         });
@@ -182,18 +186,36 @@ impl eframe::App for PuugitApp {
 
             ui.set_enabled(!self.dialog.is_open());
 
+            let sub_name = self
+                .subscriptions
+                .get(self.selected_subscription)
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
+            let selected_repo_id = self.selected_repo_id.clone();
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if let Some(sub) = self.subscriptions.get_mut(self.selected_subscription) {
                     for node in &mut sub.nodes {
-                        crate::tree_view::show_node(ui, node, &mut actions);
+                        crate::tree_view::show_node(
+                            ui,
+                            node,
+                            &mut actions,
+                            &selected_repo_id,
+                            &sub_name,
+                        );
                     }
                 }
             });
 
             for action in actions {
                 match action {
-                    NodeAction::Select { name, local_path } => {
+                    NodeAction::Select {
+                        name,
+                        local_path,
+                        repo_id,
+                    } => {
                         self.side_panel.select(name, local_path);
+                        self.selected_repo_id = Some(repo_id);
                     }
                     other if !self.dialog.is_open() => {
                         self.handle_action(other);
@@ -244,8 +266,13 @@ impl PuugitApp {
                     warnings,
                 });
             }
-            NodeAction::Select { name, local_path } => {
+            NodeAction::Select {
+                name,
+                local_path,
+                repo_id,
+            } => {
                 self.side_panel.select(name, local_path);
+                self.selected_repo_id = Some(repo_id);
             }
         }
     }
