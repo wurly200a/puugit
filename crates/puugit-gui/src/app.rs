@@ -157,6 +157,19 @@ impl eframe::App for PuugitApp {
                     self.add_repo_dialog.open = true;
                 }
             });
+            ui.horizontal(|ui| {
+                if ui.button("\u{1f504} Reload").clicked() {
+                    if let Some(config) = &self.local_config {
+                        let idx = self.selected_subscription;
+                        if let Some(new_tree) = load_subscription_tree(config, idx) {
+                            if idx < self.subscriptions.len() {
+                                self.subscriptions[idx] = new_tree;
+                            }
+                        }
+                    }
+                    self.side_panel.selected_repo = None;
+                }
+            });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -285,90 +298,94 @@ fn load_local_config() -> Result<(PathBuf, puugit_core::config::LocalConfig), St
     Ok((path, config))
 }
 
-fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree> {
+fn load_subscription_tree(
+    local: &puugit_core::config::LocalConfig,
+    idx: usize,
+) -> Option<SubscriptionTree> {
     use puugit_core::config::resolve;
 
-    let mut result: Vec<SubscriptionTree> = Vec::new();
+    let sub = local.subscriptions.get(idx)?;
+    let base_clone_dir = resolve::expand_tilde(&sub.base_clone_dir);
+    let sub_dir = resolve::expand_tilde(&sub.local_path);
+    let repos_toml = sub_dir.join("repos.toml");
 
-    for sub in &local.subscriptions {
-        let base_clone_dir = resolve::expand_tilde(&sub.base_clone_dir);
-        let sub_dir = resolve::expand_tilde(&sub.local_path);
-        let repos_toml = sub_dir.join("repos.toml");
+    if !repos_toml.exists() {
+        eprintln!(
+            "Warning: repos.toml not found for subscription '{}' at {}, skipping",
+            sub.name,
+            repos_toml.display()
+        );
+        return None;
+    }
 
-        if !repos_toml.exists() {
+    let repos = match puugit_core::config::ReposConfig::load(&repos_toml) {
+        Ok(r) => r,
+        Err(e) => {
             eprintln!(
-                "Warning: repos.toml not found for subscription '{}' at {}, skipping",
-                sub.name,
-                repos_toml.display()
+                "Warning: failed to load repos.toml for subscription '{}': {e}, skipping",
+                sub.name
             );
-            continue;
+            return None;
         }
+    };
 
-        let repos = match puugit_core::config::ReposConfig::load(&repos_toml) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!(
-                    "Warning: failed to load repos.toml for subscription '{}': {e}, skipping",
-                    sub.name
-                );
-                continue;
-            }
-        };
+    let mut folder_nodes: Vec<TreeNode> = Vec::new();
 
-        let mut folder_nodes: Vec<TreeNode> = Vec::new();
+    for tree_group in &repos.tree {
+        let mut children: Vec<TreeNode> = Vec::new();
 
-        for tree_group in &repos.tree {
-            let mut children: Vec<TreeNode> = Vec::new();
+        for child in &tree_group.children {
+            let repo_path =
+                resolve::resolve_local_path(&child.name, &tree_group.name, &base_clone_dir);
 
-            for child in &tree_group.children {
-                let repo_path =
-                    resolve::resolve_local_path(&child.name, &tree_group.name, &base_clone_dir);
+            let url = match &child.account {
+                Some(acc) => resolve::resolve_clone_url(
+                    child.url.as_deref().unwrap_or(""),
+                    acc,
+                    &local.account_keys,
+                    &repos.accounts,
+                ),
+                None => child.url.clone().unwrap_or_default(),
+            };
 
-                let url = match &child.account {
-                    Some(acc) => resolve::resolve_clone_url(
-                        child.url.as_deref().unwrap_or(""),
-                        acc,
-                        &local.account_keys,
-                        &repos.accounts,
-                    ),
-                    None => child.url.clone().unwrap_or_default(),
-                };
+            let cloned = repo_path.exists();
+            let status = if cloned {
+                puugit_core::repo_status::get_repo_status(&repo_path).ok()
+            } else {
+                None
+            };
 
-                let cloned = repo_path.exists();
-                let status = if cloned {
-                    puugit_core::repo_status::get_repo_status(&repo_path).ok()
-                } else {
-                    None
-                };
-
-                children.push(TreeNode {
-                    name: child.name.clone(),
-                    kind: NodeKind::Repo {
-                        url,
-                        local_path: repo_path,
-                        cloned,
-                        status,
-                    },
-                    children: vec![],
-                    expanded: false,
-                });
-            }
-
-            folder_nodes.push(TreeNode {
-                name: tree_group.name.clone(),
-                kind: NodeKind::Folder,
-                children,
-                expanded: true,
+            children.push(TreeNode {
+                name: child.name.clone(),
+                kind: NodeKind::Repo {
+                    url,
+                    local_path: repo_path,
+                    cloned,
+                    status,
+                },
+                children: vec![],
+                expanded: false,
             });
         }
 
-        result.push(SubscriptionTree {
-            name: sub.name.clone(),
-            nodes: folder_nodes,
-            repos,
-            repos_toml_path: repos_toml,
+        folder_nodes.push(TreeNode {
+            name: tree_group.name.clone(),
+            kind: NodeKind::Folder,
+            children,
+            expanded: true,
         });
     }
 
-    result
+    Some(SubscriptionTree {
+        name: sub.name.clone(),
+        nodes: folder_nodes,
+        repos,
+        repos_toml_path: repos_toml,
+    })
+}
+
+fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree> {
+    (0..local.subscriptions.len())
+        .filter_map(|i| load_subscription_tree(local, i))
+        .collect()
 }
