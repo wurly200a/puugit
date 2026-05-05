@@ -62,4 +62,57 @@ impl ReposConfig {
     pub fn subscription_path(subscription_local_path: &str) -> PathBuf {
         PathBuf::from(subscription_local_path).join("repos.toml")
     }
+
+    pub fn update_repo(
+        &mut self,
+        old_tree: &str,
+        repo_name: &str,
+        new_url: String,
+        new_account: String,
+        new_tree: String,
+    ) {
+        let mut node: Option<TreeNode> = None;
+        for tree in &mut self.tree {
+            if tree.name == old_tree {
+                if let Some(pos) = tree.children.iter().position(|c| c.name == repo_name) {
+                    node = Some(tree.children.remove(pos));
+                    break;
+                }
+            }
+        }
+        let Some(mut n) = node else {
+            return;
+        };
+        n.url = Some(new_url);
+        n.account = if new_account.is_empty() {
+            None
+        } else {
+            Some(new_account)
+        };
+        if let Some(tree) = self.tree.iter_mut().find(|t| t.name == new_tree) {
+            tree.children.push(n);
+        } else {
+            self.tree.push(TreeNode {
+                name: new_tree,
+                url: None,
+                account: None,
+                children: vec![n],
+            });
+        }
+        self.cleanup_empty_trees();
+    }
+
+    pub fn remove_repo(&mut self, tree_name: &str, repo_name: &str) {
+        for tree in &mut self.tree {
+            if tree.name == tree_name {
+                tree.children.retain(|c| c.name != repo_name);
+                break;
+            }
+        }
+        self.cleanup_empty_trees();
+    }
+
+    fn cleanup_empty_trees(&mut self) {
+        self.tree.retain(|t| !t.children.is_empty());
+    }
 }

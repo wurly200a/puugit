@@ -6,6 +6,9 @@ pub enum NodeKind {
     Folder,
     Repo {
         url: String,
+        raw_url: String,
+        account: String,
+        tree_name: String,
         local_path: PathBuf,
         cloned: bool,
         status: Option<RepoStatus>,
@@ -33,6 +36,10 @@ pub enum NodeAction {
         name: String,
         local_path: PathBuf,
         repo_id: String,
+        cloned: bool,
+        url: String,
+        account: String,
+        tree_name: String,
     },
 }
 
@@ -56,6 +63,9 @@ pub fn show_node(
         }
         NodeKind::Repo {
             url,
+            raw_url,
+            account,
+            tree_name,
             local_path,
             cloned,
             status,
@@ -93,10 +103,8 @@ pub fn show_node(
             });
 
             let row_rect = inner.response.rect;
-            let content_rect = egui::Rect::from_min_max(
-                egui::pos2(content_x, row_rect.min.y),
-                row_rect.max,
-            );
+            let content_rect =
+                egui::Rect::from_min_max(egui::pos2(content_x, row_rect.min.y), row_rect.max);
             let row_response = ui.interact(
                 content_rect,
                 ui.id().with(repo_id.as_str()),
@@ -109,8 +117,10 @@ pub fn show_node(
                 egui::Color32::TRANSPARENT
             };
 
-            ui.painter()
-                .set(bg_idx, egui::Shape::rect_filled(content_rect, 2.0, bg_color));
+            ui.painter().set(
+                bg_idx,
+                egui::Shape::rect_filled(content_rect, 2.0, bg_color),
+            );
 
             if is_selected {
                 ui.painter().line_segment(
@@ -131,6 +141,10 @@ pub fn show_node(
                     name: node.name.clone(),
                     local_path: local_path.clone(),
                     repo_id,
+                    cloned: *cloned,
+                    url: raw_url.clone(),
+                    account: account.clone(),
+                    tree_name: tree_name.clone(),
                 });
             }
 

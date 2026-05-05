@@ -4,7 +4,7 @@ use std::time::Instant;
 use crate::account_view::AccountWindow;
 use crate::add_repo_dialog::AddRepoDialog;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
-use crate::side_panel::SidePanel;
+use crate::side_panel::{SidePanel, SidePanelAction};
 use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
@@ -132,7 +132,72 @@ impl eframe::App for PuugitApp {
             }
         }
 
-        self.side_panel.show(ctx);
+        let account_names: Vec<String> = self
+            .local_config
+            .as_ref()
+            .map(|c| {
+                let mut names: Vec<String> = c.account_keys.keys().cloned().collect();
+                names.sort();
+                names
+            })
+            .unwrap_or_default();
+        let tree_names: Vec<String> = self
+            .subscriptions
+            .get(self.selected_subscription)
+            .map(|s| s.repos.tree.iter().map(|t| t.name.clone()).collect())
+            .unwrap_or_default();
+
+        let side_panel_action = self.side_panel.show(ctx, &account_names, &tree_names);
+
+        match side_panel_action {
+            SidePanelAction::None => {}
+            SidePanelAction::SaveEdit {
+                old_tree,
+                repo_name,
+                new_url,
+                new_account,
+                new_tree,
+            } => {
+                let idx = self.selected_subscription;
+                if let Some(sub) = self.subscriptions.get_mut(idx) {
+                    sub.repos
+                        .update_repo(&old_tree, &repo_name, new_url, new_account, new_tree);
+                    sub.repos.save(&sub.repos_toml_path).ok();
+                }
+                let new_sub = self
+                    .local_config
+                    .as_ref()
+                    .and_then(|c| load_subscription_tree(c, idx));
+                if let Some(ns) = new_sub {
+                    if idx < self.subscriptions.len() {
+                        self.subscriptions[idx] = ns;
+                    }
+                }
+                self.side_panel.selected_repo = None;
+                self.selected_repo_id = None;
+            }
+            SidePanelAction::Delete {
+                tree_name,
+                repo_name,
+            } => {
+                let idx = self.selected_subscription;
+                if let Some(sub) = self.subscriptions.get_mut(idx) {
+                    sub.repos.remove_repo(&tree_name, &repo_name);
+                    sub.repos.save(&sub.repos_toml_path).ok();
+                }
+                let new_sub = self
+                    .local_config
+                    .as_ref()
+                    .and_then(|c| load_subscription_tree(c, idx));
+                if let Some(ns) = new_sub {
+                    if idx < self.subscriptions.len() {
+                        self.subscriptions[idx] = ns;
+                    }
+                }
+                self.side_panel.selected_repo = None;
+                self.selected_repo_id = None;
+            }
+        }
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -213,8 +278,13 @@ impl eframe::App for PuugitApp {
                         name,
                         local_path,
                         repo_id,
+                        cloned,
+                        url,
+                        account,
+                        tree_name,
                     } => {
-                        self.side_panel.select(name, local_path);
+                        self.side_panel
+                            .select(name, local_path, cloned, url, account, tree_name);
                         self.selected_repo_id = Some(repo_id);
                     }
                     other if !self.dialog.is_open() => {
@@ -270,8 +340,13 @@ impl PuugitApp {
                 name,
                 local_path,
                 repo_id,
+                cloned,
+                url,
+                account,
+                tree_name,
             } => {
-                self.side_panel.select(name, local_path);
+                self.side_panel
+                    .select(name, local_path, cloned, url, account, tree_name);
                 self.selected_repo_id = Some(repo_id);
             }
         }
@@ -386,6 +461,9 @@ fn load_subscription_tree(
                 name: child.name.clone(),
                 kind: NodeKind::Repo {
                     url,
+                    raw_url: child.url.clone().unwrap_or_default(),
+                    account: child.account.clone().unwrap_or_default(),
+                    tree_name: tree_group.name.clone(),
                     local_path: repo_path,
                     cloned,
                     status,
