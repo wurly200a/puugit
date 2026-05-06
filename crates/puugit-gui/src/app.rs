@@ -105,7 +105,8 @@ impl eframe::App for PuugitApp {
         let mut needs_rebuild = false;
 
         if let (Some(config), Some(path)) = (&mut self.local_config, config_path.clone()) {
-            if self.account_window.show(ctx, config, &path) {
+            let idx = self.selected_subscription;
+            if self.account_window.show(ctx, config, idx, &path) {
                 needs_rebuild = true;
             }
         }
@@ -114,11 +115,22 @@ impl eframe::App for PuugitApp {
                 needs_rebuild = true;
             }
         }
+        let account_names: Vec<String> = self
+            .local_config
+            .as_ref()
+            .and_then(|c| c.subscriptions.get(self.selected_subscription))
+            .map(|sub| {
+                let mut names: Vec<String> = sub.account_map.keys().cloned().collect();
+                names.sort();
+                names
+            })
+            .unwrap_or_default();
+
         let selected = self.selected_subscription;
         let add_repo_dialog = &mut self.add_repo_dialog;
         let subscriptions = &mut self.subscriptions;
         if let Some(sub) = subscriptions.get_mut(selected) {
-            if add_repo_dialog.show(ctx, &mut sub.repos, &sub.repos_toml_path) {
+            if add_repo_dialog.show(ctx, &mut sub.repos, &sub.repos_toml_path, &account_names) {
                 needs_rebuild = true;
             }
         }
@@ -131,16 +143,6 @@ impl eframe::App for PuugitApp {
                 }
             }
         }
-
-        let account_names: Vec<String> = self
-            .local_config
-            .as_ref()
-            .map(|c| {
-                let mut names: Vec<String> = c.account_keys.keys().cloned().collect();
-                names.sort();
-                names
-            })
-            .unwrap_or_default();
         let tree_names: Vec<String> = self
             .subscriptions
             .get(self.selected_subscription)
@@ -201,9 +203,6 @@ impl eframe::App for PuugitApp {
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("Accounts").clicked() {
-                    self.account_window.open = true;
-                }
                 if ui.button("Subscriptions").clicked() {
                     self.subscription_window.open = true;
                 }
@@ -221,6 +220,9 @@ impl eframe::App for PuugitApp {
                             ui.selectable_value(&mut self.selected_subscription, i, &sub.name);
                         }
                     });
+                if ui.button("Account Map").clicked() {
+                    self.account_window.open = true;
+                }
                 if ui.button("Add Repo").clicked() {
                     self.add_repo_dialog.open = true;
                 }
@@ -444,8 +446,7 @@ fn load_subscription_tree(
                 Some(acc) => resolve::resolve_clone_url(
                     child.url.as_deref().unwrap_or(""),
                     acc,
-                    &local.account_keys,
-                    &repos.accounts,
+                    &sub.account_map,
                 ),
                 None => child.url.clone().unwrap_or_default(),
             };

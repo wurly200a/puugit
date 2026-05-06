@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::repos::Account;
-
 /// Resolves home directory: $HOME env var first, then dirs::home_dir().
 fn home_dir() -> Option<PathBuf> {
     std::env::var("HOME")
@@ -24,15 +22,14 @@ pub fn expand_tilde(path: &str) -> PathBuf {
 }
 
 /// Replaces the host in a `git@host:...` URL with the SSH host alias for the account.
-/// The alias comes from `account_keys[account_name]` in local.toml.
-/// `_accounts` is kept for future host-verification use.
+/// Looks up `account_name` in `account_map` (logical label → SSH host alias).
+/// Returns url unchanged if account_name is not in the map.
 pub fn resolve_clone_url(
     url: &str,
     account_name: &str,
-    account_keys: &HashMap<String, String>,
-    _accounts: &[Account],
+    account_map: &HashMap<String, String>,
 ) -> String {
-    let alias = match account_keys.get(account_name) {
+    let alias = match account_map.get(account_name) {
         Some(a) => a.as_str(),
         None => return url.to_string(),
     };
@@ -45,21 +42,11 @@ pub fn resolve_clone_url(
     url.to_string()
 }
 
-/// Resolves the SSH host alias for a subscription's config_repo URL.
-/// Equivalent to resolve_clone_url but without needing the accounts list.
-pub fn resolve_config_repo_url(
-    config_repo: &str,
-    account_name: &str,
-    account_keys: &HashMap<String, String>,
-) -> String {
-    let alias = match account_keys.get(account_name) {
-        Some(a) => a.as_str(),
-        None => return config_repo.to_string(),
-    };
-
+/// Replaces the host in a config_repo URL with the given SSH host alias directly.
+pub fn resolve_config_repo_url(config_repo: &str, ssh_host_alias: &str) -> String {
     if let Some(rest) = config_repo.strip_prefix("git@") {
         if let Some(colon_pos) = rest.find(':') {
-            return format!("git@{}:{}", alias, &rest[colon_pos + 1..]);
+            return format!("git@{}:{}", ssh_host_alias, &rest[colon_pos + 1..]);
         }
     }
     config_repo.to_string()

@@ -25,19 +25,19 @@ fn config_base_dir() -> Option<PathBuf> {
 pub struct Subscription {
     pub name: String,
     pub config_repo: String,
-    /// Account name key in account_keys (used for config_repo URL resolution)
-    pub account: String,
+    /// SSH host alias used to clone config_repo (e.g. "github-wurly200a")
+    pub config_account: String,
     pub local_path: String,
     /// Clone destination root for repos in this subscription
     pub base_clone_dir: String,
+    /// Maps logical account label → SSH host alias (e.g. "private-wurly200a" → "github-wurly200a")
+    #[serde(default)]
+    pub account_map: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LocalConfig {
     pub machine_id: String,
-    /// Maps account name to SSH host alias (e.g. "personal" → "github-wurly200a")
-    #[serde(default)]
-    pub account_keys: HashMap<String, String>,
     #[serde(default)]
     pub subscriptions: Vec<Subscription>,
 }
@@ -46,7 +46,6 @@ impl Default for LocalConfig {
     fn default() -> Self {
         Self {
             machine_id: String::new(),
-            account_keys: HashMap::new(),
             subscriptions: Vec::new(),
         }
     }

@@ -5,13 +5,6 @@ use std::path::{Path, PathBuf};
 use crate::error::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Account {
-    pub name: String,
-    pub host: String,
-    pub username: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TreeNode {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -25,17 +18,12 @@ pub struct TreeNode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReposConfig {
     #[serde(default)]
-    pub accounts: Vec<Account>,
-    #[serde(default)]
     pub tree: Vec<TreeNode>,
 }
 
 impl Default for ReposConfig {
     fn default() -> Self {
-        Self {
-            accounts: Vec::new(),
-            tree: Vec::new(),
-        }
+        Self { tree: Vec::new() }
     }
 }
 

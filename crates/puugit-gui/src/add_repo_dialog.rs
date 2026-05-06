@@ -34,6 +34,7 @@ impl AddRepoDialog {
         ctx: &egui::Context,
         repos: &mut ReposConfig,
         repos_toml_path: &Path,
+        account_labels: &[String],
     ) -> bool {
         if self.open && !self.was_open {
             self.url_input.clear();
@@ -82,16 +83,15 @@ impl AddRepoDialog {
                         ui.end_row();
 
                         ui.label("Account:");
-                        let account_text = repos
-                            .accounts
+                        let account_text = account_labels
                             .get(*selected_account)
-                            .map(|a| a.name.clone())
-                            .unwrap_or_else(|| "(none)".to_string());
+                            .map(|s| s.as_str())
+                            .unwrap_or("(none)");
                         egui::ComboBox::from_id_source("add_repo_account")
                             .selected_text(account_text)
                             .show_ui(ui, |ui| {
-                                for (i, acc) in repos.accounts.iter().enumerate() {
-                                    ui.selectable_value(selected_account, i, &acc.name);
+                                for (i, label) in account_labels.iter().enumerate() {
+                                    ui.selectable_value(selected_account, i, label);
                                 }
                             });
                         ui.end_row();
@@ -144,6 +144,7 @@ impl AddRepoDialog {
                 new_tree_sentinel,
                 repos,
                 repos_toml_path,
+                account_labels,
             ) {
                 Ok(()) => {
                     modified = true;
@@ -169,6 +170,7 @@ fn do_add(
     new_tree_sentinel: usize,
     repos: &mut ReposConfig,
     repos_toml_path: &Path,
+    account_labels: &[String],
 ) -> Result<(), String> {
     let url = url.trim().to_string();
     let name = name.trim().to_string();
@@ -186,7 +188,7 @@ fn do_add(
         }
     }
 
-    let account = repos.accounts.get(selected_account).map(|a| a.name.clone());
+    let account = account_labels.get(selected_account).cloned();
 
     let new_child = RepoTreeNode {
         name,

@@ -12,7 +12,7 @@ pub use repo_status::{get_repo_status, RepoStatus, RepoStatusError, UnpushedBran
 mod tests {
     use super::*;
     use config::local::Subscription;
-    use config::repos::{Account, TreeNode};
+    use config::repos::TreeNode;
     use std::collections::HashMap;
     use tempfile::TempDir;
 
@@ -27,27 +27,30 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = temp_path(&dir, "local.toml");
 
-        let mut account_keys = HashMap::new();
-        account_keys.insert("personal".to_string(), "github-wurly200a".to_string());
-        account_keys.insert("work".to_string(), "github-yushi3".to_string());
+        let mut account_map_private = HashMap::new();
+        account_map_private.insert("private-wurly200a".to_string(), "github-wurly200a".to_string());
+
+        let mut account_map_work = HashMap::new();
+        account_map_work.insert("work-yushi3".to_string(), "github-yushi3".to_string());
 
         let original = LocalConfig {
             machine_id: "win-main".to_string(),
-            account_keys,
             subscriptions: vec![
                 Subscription {
                     name: "private".to_string(),
                     config_repo: "git@github.com:wurly/puugit-private.git".to_string(),
-                    account: "personal".to_string(),
+                    config_account: "github-wurly200a".to_string(),
                     local_path: "~/.config/puugit/subscriptions/private".to_string(),
                     base_clone_dir: "D:/home/wurly/projects/private".to_string(),
+                    account_map: account_map_private,
                 },
                 Subscription {
                     name: "work".to_string(),
                     config_repo: "git@github.com:wurly-work/puugit-work.git".to_string(),
-                    account: "work".to_string(),
+                    config_account: "github-yushi3".to_string(),
                     local_path: "~/.config/puugit/subscriptions/work".to_string(),
                     base_clone_dir: "D:/home/wurly/projects/work".to_string(),
+                    account_map: account_map_work,
                 },
             ],
         };
@@ -76,18 +79,6 @@ mod tests {
         let path = temp_path(&dir, "repos.toml");
 
         let original = ReposConfig {
-            accounts: vec![
-                Account {
-                    name: "personal".to_string(),
-                    host: "github.com".to_string(),
-                    username: "wurly-personal".to_string(),
-                },
-                Account {
-                    name: "work".to_string(),
-                    host: "github.com".to_string(),
-                    username: "wurly-work".to_string(),
-                },
-            ],
             tree: vec![TreeNode {
                 name: "music".to_string(),
                 url: None,
@@ -96,13 +87,13 @@ mod tests {
                     TreeNode {
                         name: "xdx-rs".to_string(),
                         url: Some("git@github.com:wurly/xdx-rs.git".to_string()),
-                        account: Some("personal".to_string()),
+                        account: Some("private-wurly200a".to_string()),
                         children: vec![],
                     },
                     TreeNode {
                         name: "some-synth".to_string(),
                         url: Some("git@github.com:wurly/some-synth.git".to_string()),
-                        account: Some("personal".to_string()),
+                        account: Some("private-wurly200a".to_string()),
                         children: vec![],
                     },
                 ],

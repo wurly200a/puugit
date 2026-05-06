@@ -5,9 +5,10 @@ use puugit_core::config::local::Subscription;
 pub struct SubscriptionWindow {
     pub open: bool,
     was_open: bool,
+    ssh_aliases: Vec<String>,
     new_name: String,
     new_config_repo: String,
-    new_account_idx: usize,
+    new_config_account_idx: usize,
     new_local_path: String,
     new_base_clone_dir: String,
 }
@@ -17,9 +18,10 @@ impl SubscriptionWindow {
         Self {
             open: false,
             was_open: false,
+            ssh_aliases: Vec::new(),
             new_name: String::new(),
             new_config_repo: String::new(),
-            new_account_idx: 0,
+            new_config_account_idx: 0,
             new_local_path: String::new(),
             new_base_clone_dir: String::new(),
         }
@@ -34,10 +36,13 @@ impl SubscriptionWindow {
         config_path: &Path,
     ) -> bool {
         if self.open && !self.was_open {
-            // Reset new-entry form when window opens
+            self.ssh_aliases = puugit_core::ssh_config::parse_ssh_config()
+                .into_iter()
+                .map(|e| e.alias)
+                .collect();
             self.new_name.clear();
             self.new_config_repo.clear();
-            self.new_account_idx = 0;
+            self.new_config_account_idx = 0;
             self.new_local_path.clear();
             self.new_base_clone_dir.clear();
         }
@@ -47,22 +52,15 @@ impl SubscriptionWindow {
             return false;
         }
 
-        // Pre-compute account name list before closures borrow config
-        let account_names: Vec<String> = {
-            let mut v: Vec<String> = config.account_keys.keys().cloned().collect();
-            v.sort();
-            v
-        };
-
         let mut open = true;
         let mut modified = false;
         let mut to_delete: Option<usize> = None;
         let mut to_add: Option<Subscription> = None;
 
-        // Borrow new-entry fields before the Window closure
+        let ssh_aliases = &self.ssh_aliases;
         let new_name = &mut self.new_name;
         let new_config_repo = &mut self.new_config_repo;
-        let new_account_idx = &mut self.new_account_idx;
+        let new_config_account_idx = &mut self.new_config_account_idx;
         let new_local_path = &mut self.new_local_path;
         let new_base_clone_dir = &mut self.new_base_clone_dir;
 
@@ -104,26 +102,25 @@ impl SubscriptionWindow {
                                         }
                                         ui.end_row();
 
-                                        ui.label("Account:");
-                                        let mut acc_idx = account_names
+                                        ui.label("Config Account:");
+                                        let mut acc_idx = ssh_aliases
                                             .iter()
-                                            .position(|a| a == &sub.account)
+                                            .position(|a| a == &sub.config_account)
                                             .unwrap_or(0);
+                                        let selected_text = ssh_aliases
+                                            .get(acc_idx)
+                                            .map(|s| s.as_str())
+                                            .unwrap_or(sub.config_account.as_str());
                                         egui::ComboBox::from_id_source(format!("sub_acc_{}", i))
-                                            .selected_text(
-                                                account_names
-                                                    .get(acc_idx)
-                                                    .map(|s| s.as_str())
-                                                    .unwrap_or(&sub.account),
-                                            )
+                                            .selected_text(selected_text)
                                             .show_ui(ui, |ui| {
-                                                for (j, acc) in account_names.iter().enumerate() {
-                                                    ui.selectable_value(&mut acc_idx, j, acc);
+                                                for (j, alias) in ssh_aliases.iter().enumerate() {
+                                                    ui.selectable_value(&mut acc_idx, j, alias);
                                                 }
                                             });
-                                        if let Some(new_acc) = account_names.get(acc_idx) {
-                                            if new_acc != &sub.account {
-                                                sub.account = new_acc.clone();
+                                        if let Some(new_alias) = ssh_aliases.get(acc_idx) {
+                                            if new_alias != &sub.config_account {
+                                                sub.config_account = new_alias.clone();
                                                 modified = true;
                                             }
                                         }
@@ -183,23 +180,24 @@ impl SubscriptionWindow {
                         ui.add(egui::TextEdit::singleline(new_config_repo).desired_width(300.0));
                         ui.end_row();
 
-                        ui.label("Account:");
+                        ui.label("Config Account:");
+                        let alias_text = ssh_aliases
+                            .get(*new_config_account_idx)
+                            .map(|s| s.as_str())
+                            .unwrap_or("(none)");
                         egui::ComboBox::from_id_source("new_sub_acc")
-                            .selected_text(
-                                account_names
-                                    .get(*new_account_idx)
-                                    .map(|s| s.as_str())
-                                    .unwrap_or("(none)"),
-                            )
+                            .selected_text(alias_text)
                             .show_ui(ui, |ui| {
-                                for (j, acc) in account_names.iter().enumerate() {
-                                    ui.selectable_value(new_account_idx, j, acc);
+                                for (j, alias) in ssh_aliases.iter().enumerate() {
+                                    ui.selectable_value(new_config_account_idx, j, alias);
                                 }
                             });
                         ui.end_row();
 
                         ui.label("Base Clone Dir:");
-                        ui.add(egui::TextEdit::singleline(new_base_clone_dir).desired_width(300.0));
+                        ui.add(
+                            egui::TextEdit::singleline(new_base_clone_dir).desired_width(300.0),
+                        );
                         ui.end_row();
 
                         ui.label("Local Path:");
@@ -210,20 +208,20 @@ impl SubscriptionWindow {
                 let can_add = !new_name.is_empty()
                     && !new_config_repo.is_empty()
                     && !new_base_clone_dir.is_empty()
-                    && !new_local_path.is_empty()
-                    && !account_names.is_empty();
+                    && !new_local_path.is_empty();
 
                 if ui.add_enabled(can_add, egui::Button::new("Add")).clicked() {
-                    let account = account_names
-                        .get(*new_account_idx)
+                    let config_account = ssh_aliases
+                        .get(*new_config_account_idx)
                         .cloned()
                         .unwrap_or_default();
                     to_add = Some(Subscription {
                         name: new_name.clone(),
                         config_repo: new_config_repo.clone(),
-                        account,
+                        config_account,
                         local_path: new_local_path.clone(),
                         base_clone_dir: new_base_clone_dir.clone(),
+                        account_map: std::collections::HashMap::new(),
                     });
                     new_name.clear();
                     new_config_repo.clear();
@@ -234,7 +232,6 @@ impl SubscriptionWindow {
 
         self.open = open;
 
-        // Apply mutations after closure
         if let Some(i) = to_delete {
             config.subscriptions.remove(i);
             modified = true;
