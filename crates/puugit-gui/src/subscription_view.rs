@@ -195,9 +195,7 @@ impl SubscriptionWindow {
                         ui.end_row();
 
                         ui.label("Base Clone Dir:");
-                        ui.add(
-                            egui::TextEdit::singleline(new_base_clone_dir).desired_width(300.0),
-                        );
+                        ui.add(egui::TextEdit::singleline(new_base_clone_dir).desired_width(300.0));
                         ui.end_row();
 
                         ui.label("Local Path:");

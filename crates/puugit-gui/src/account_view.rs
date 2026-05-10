@@ -74,8 +74,7 @@ impl AccountWindow {
                         labels.sort();
 
                         for label in &labels {
-                            let old_alias =
-                                sub.account_map.get(label).cloned().unwrap_or_default();
+                            let old_alias = sub.account_map.get(label).cloned().unwrap_or_default();
                             let mut current_idx = ssh_aliases
                                 .iter()
                                 .position(|a| a == &old_alias)

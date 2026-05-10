@@ -8,6 +8,16 @@ use crate::side_panel::{SidePanel, SidePanelAction};
 use crate::subscription_view::SubscriptionWindow;
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
+enum SyncKind {
+    Save,
+    Update,
+}
+
+struct SyncOp {
+    kind: SyncKind,
+    receiver: std::sync::mpsc::Receiver<puugit_core::git_ops::SyncResult>,
+}
+
 pub struct SubscriptionTree {
     pub name: String,
     pub nodes: Vec<TreeNode>,
@@ -27,6 +37,8 @@ pub struct PuugitApp {
     subscription_window: SubscriptionWindow,
     add_repo_dialog: AddRepoDialog,
     side_panel: SidePanel,
+    sync_op: Option<SyncOp>,
+    sync_message: Option<(bool, String)>,
 }
 
 impl PuugitApp {
@@ -57,6 +69,8 @@ impl PuugitApp {
                     subscription_window: SubscriptionWindow::new(),
                     add_repo_dialog: AddRepoDialog::new(),
                     side_panel: SidePanel::new(),
+                    sync_op: None,
+                    sync_message: None,
                 }
             }
             Err(msg) => Self {
@@ -71,6 +85,8 @@ impl PuugitApp {
                 subscription_window: SubscriptionWindow::new(),
                 add_repo_dialog: AddRepoDialog::new(),
                 side_panel: SidePanel::new(),
+                sync_op: None,
+                sync_message: None,
             },
         }
     }
@@ -79,6 +95,45 @@ impl PuugitApp {
 impl eframe::App for PuugitApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(1.0);
+
+        // Poll running sync operation
+        let sync_result = if let Some(op) = &self.sync_op {
+            match op.receiver.try_recv() {
+                Ok(result) => Some(result),
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    ctx.request_repaint();
+                    None
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    Some(puugit_core::git_ops::SyncResult::Failed(
+                        "sync thread disconnected unexpectedly".to_string(),
+                    ))
+                }
+            }
+        } else {
+            None
+        };
+        if let Some(result) = sync_result {
+            let op = self.sync_op.take().unwrap();
+            let (is_error, message) = match result {
+                puugit_core::git_ops::SyncResult::Success(msg) => (false, msg),
+                puugit_core::git_ops::SyncResult::Failed(msg) => (true, msg),
+            };
+            if !is_error && matches!(op.kind, SyncKind::Update) {
+                if let Some(config) = &self.local_config {
+                    let idx = self.selected_subscription;
+                    if let Some(new_tree) = load_subscription_tree(config, idx) {
+                        if idx < self.subscriptions.len() {
+                            self.subscriptions[idx] = new_tree;
+                        }
+                    }
+                }
+                self.side_panel.selected_repo = None;
+                self.selected_repo_id = None;
+            }
+            self.sync_message = Some((is_error, message));
+        }
+
         let dialog_action = self.dialog.show(ctx);
         match dialog_action {
             DialogAction::None => {}
@@ -240,7 +295,52 @@ impl eframe::App for PuugitApp {
                     self.side_panel.selected_repo = None;
                     self.selected_repo_id = None;
                 }
+
+                let syncing = self.sync_op.is_some();
+                let has_sub = self
+                    .local_config
+                    .as_ref()
+                    .and_then(|c| c.subscriptions.get(self.selected_subscription))
+                    .is_some();
+
+                if ui
+                    .add_enabled(!syncing && has_sub, egui::Button::new("Save"))
+                    .clicked()
+                {
+                    if let Some(opts) = self.sync_options() {
+                        self.sync_message = None;
+                        self.sync_op = Some(SyncOp {
+                            kind: SyncKind::Save,
+                            receiver: puugit_core::git_ops::save_config(opts),
+                        });
+                    }
+                }
+                if ui
+                    .add_enabled(!syncing && has_sub, egui::Button::new("Update & Load"))
+                    .clicked()
+                {
+                    if let Some(opts) = self.sync_options() {
+                        self.sync_message = None;
+                        self.sync_op = Some(SyncOp {
+                            kind: SyncKind::Update,
+                            receiver: puugit_core::git_ops::update_config(opts),
+                        });
+                    }
+                }
+                if syncing {
+                    ui.spinner();
+                }
             });
+            if let Some((is_error, msg)) = &self.sync_message {
+                ui.horizontal(|ui| {
+                    let color = if *is_error {
+                        egui::Color32::RED
+                    } else {
+                        egui::Color32::from_rgb(0, 160, 0)
+                    };
+                    ui.colored_label(color, msg);
+                });
+            }
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -300,6 +400,19 @@ impl eframe::App for PuugitApp {
 }
 
 impl PuugitApp {
+    fn sync_options(&self) -> Option<puugit_core::git_ops::SyncOptions> {
+        use puugit_core::config::resolve;
+        let config = self.local_config.as_ref()?;
+        let sub = config.subscriptions.get(self.selected_subscription)?;
+        let local_path = resolve::expand_tilde(&sub.local_path);
+        let config_repo_url =
+            resolve::resolve_config_repo_url(&sub.config_repo, &sub.config_account);
+        Some(puugit_core::git_ops::SyncOptions {
+            local_path,
+            config_repo_url,
+        })
+    }
+
     fn handle_action(&mut self, action: NodeAction) {
         match action {
             NodeAction::Clone {

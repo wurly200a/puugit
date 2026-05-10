@@ -28,7 +28,10 @@ mod tests {
         let path = temp_path(&dir, "local.toml");
 
         let mut account_map_private = HashMap::new();
-        account_map_private.insert("private-wurly200a".to_string(), "github-wurly200a".to_string());
+        account_map_private.insert(
+            "private-wurly200a".to_string(),
+            "github-wurly200a".to_string(),
+        );
 
         let mut account_map_work = HashMap::new();
         account_map_work.insert("work-yushi3".to_string(), "github-yushi3".to_string());
