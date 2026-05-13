@@ -5,7 +5,7 @@ use crate::account_view::AccountWindow;
 use crate::add_repo_dialog::AddRepoDialog;
 use crate::dialog::{CloningState, DeleteState, Dialog, DialogAction};
 use crate::side_panel::{SidePanel, SidePanelAction};
-use crate::subscription_view::SubscriptionWindow;
+use crate::subscription_view::{SubscriptionWindow, SubscriptionWindowResult};
 use crate::tree_view::{NodeAction, NodeKind, TreeNode};
 
 enum SyncKind {
@@ -15,6 +15,7 @@ enum SyncKind {
 
 struct SyncOp {
     kind: SyncKind,
+    target_subscription: usize,
     receiver: std::sync::mpsc::Receiver<puugit_core::git_ops::SyncResult>,
 }
 
@@ -121,10 +122,12 @@ impl eframe::App for PuugitApp {
             };
             if !is_error && matches!(op.kind, SyncKind::Update) {
                 if let Some(config) = &self.local_config {
-                    let idx = self.selected_subscription;
+                    let idx = op.target_subscription;
                     if let Some(new_tree) = load_subscription_tree(config, idx) {
                         if idx < self.subscriptions.len() {
                             self.subscriptions[idx] = new_tree;
+                        } else {
+                            self.subscriptions.push(new_tree);
                         }
                     }
                 }
@@ -166,8 +169,34 @@ impl eframe::App for PuugitApp {
             }
         }
         if let (Some(config), Some(path)) = (&mut self.local_config, config_path) {
-            if self.subscription_window.show(ctx, config, &path) {
-                needs_rebuild = true;
+            match self.subscription_window.show(ctx, config, &path) {
+                SubscriptionWindowResult::None => {}
+                SubscriptionWindowResult::Modified => {
+                    needs_rebuild = true;
+                }
+                SubscriptionWindowResult::Added(sub) => {
+                    needs_rebuild = true;
+                    let new_idx = config.subscriptions.len().saturating_sub(1);
+                    self.selected_subscription = new_idx;
+                    if self.sync_op.is_none() {
+                        use puugit_core::config::resolve;
+                        let local_path = resolve::expand_tilde(&sub.local_path);
+                        let config_repo_url = resolve::resolve_config_repo_url(
+                            &sub.config_repo,
+                            &sub.config_account,
+                        );
+                        let opts = puugit_core::git_ops::SyncOptions {
+                            local_path,
+                            config_repo_url,
+                        };
+                        self.sync_message = None;
+                        self.sync_op = Some(SyncOp {
+                            kind: SyncKind::Update,
+                            target_subscription: new_idx,
+                            receiver: puugit_core::git_ops::update_config(opts),
+                        });
+                    }
+                }
             }
         }
         let account_names: Vec<String> = self
@@ -311,6 +340,7 @@ impl eframe::App for PuugitApp {
                         self.sync_message = None;
                         self.sync_op = Some(SyncOp {
                             kind: SyncKind::Save,
+                            target_subscription: self.selected_subscription,
                             receiver: puugit_core::git_ops::save_config(opts),
                         });
                     }
@@ -323,6 +353,7 @@ impl eframe::App for PuugitApp {
                         self.sync_message = None;
                         self.sync_op = Some(SyncOp {
                             kind: SyncKind::Update,
+                            target_subscription: self.selected_subscription,
                             receiver: puugit_core::git_ops::update_config(opts),
                         });
                     }

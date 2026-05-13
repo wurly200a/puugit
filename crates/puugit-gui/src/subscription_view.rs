@@ -2,6 +2,12 @@ use std::path::Path;
 
 use puugit_core::config::local::Subscription;
 
+pub enum SubscriptionWindowResult {
+    None,
+    Modified,
+    Added(Subscription),
+}
+
 pub struct SubscriptionWindow {
     pub open: bool,
     was_open: bool,
@@ -28,13 +34,12 @@ impl SubscriptionWindow {
     }
 
     /// Shows the subscription management window.
-    /// Returns true if subscriptions were modified (caller should rebuild tree).
     pub fn show(
         &mut self,
         ctx: &egui::Context,
         config: &mut puugit_core::config::LocalConfig,
         config_path: &Path,
-    ) -> bool {
+    ) -> SubscriptionWindowResult {
         if self.open && !self.was_open {
             self.ssh_aliases = puugit_core::ssh_config::parse_ssh_config()
                 .into_iter()
@@ -49,11 +54,11 @@ impl SubscriptionWindow {
         self.was_open = self.open;
 
         if !self.open {
-            return false;
+            return SubscriptionWindowResult::None;
         }
 
         let mut open = true;
-        let mut modified = false;
+        let mut field_modified = false;
         let mut to_delete: Option<usize> = None;
         let mut to_add: Option<Subscription> = None;
 
@@ -86,7 +91,7 @@ impl SubscriptionWindow {
                                             )
                                             .changed()
                                         {
-                                            modified = true;
+                                            field_modified = true;
                                         }
                                         ui.end_row();
 
@@ -98,7 +103,7 @@ impl SubscriptionWindow {
                                             )
                                             .changed()
                                         {
-                                            modified = true;
+                                            field_modified = true;
                                         }
                                         ui.end_row();
 
@@ -121,7 +126,7 @@ impl SubscriptionWindow {
                                         if let Some(new_alias) = ssh_aliases.get(acc_idx) {
                                             if new_alias != &sub.config_account {
                                                 sub.config_account = new_alias.clone();
-                                                modified = true;
+                                                field_modified = true;
                                             }
                                         }
                                         ui.end_row();
@@ -134,7 +139,7 @@ impl SubscriptionWindow {
                                             )
                                             .changed()
                                         {
-                                            modified = true;
+                                            field_modified = true;
                                         }
                                         ui.end_row();
 
@@ -146,7 +151,7 @@ impl SubscriptionWindow {
                                             )
                                             .changed()
                                         {
-                                            modified = true;
+                                            field_modified = true;
                                         }
                                         ui.end_row();
                                     });
@@ -230,20 +235,25 @@ impl SubscriptionWindow {
 
         self.open = open;
 
-        if let Some(i) = to_delete {
-            config.subscriptions.remove(i);
-            modified = true;
-        }
-        if let Some(sub) = to_add {
+        let result = if let Some(sub) = to_add {
+            let added = sub.clone();
             config.subscriptions.push(sub);
-            modified = true;
-        }
-        if modified {
+            SubscriptionWindowResult::Added(added)
+        } else if let Some(i) = to_delete {
+            config.subscriptions.remove(i);
+            SubscriptionWindowResult::Modified
+        } else if field_modified {
+            SubscriptionWindowResult::Modified
+        } else {
+            SubscriptionWindowResult::None
+        };
+
+        if !matches!(result, SubscriptionWindowResult::None) {
             if let Err(e) = config.save(config_path) {
                 eprintln!("Failed to save local.toml: {e}");
             }
         }
 
-        modified
+        result
     }
 }
