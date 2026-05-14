@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use puugit_core::repo_status::RepoStatus;
@@ -49,15 +50,41 @@ pub fn show_node(
     actions: &mut Vec<NodeAction>,
     selected_repo_id: &Option<String>,
     parent_id: &str,
+    disk_usage: &HashMap<PathBuf, u64>,
+    disk_usage_calculating: bool,
 ) {
     match &mut node.kind {
         NodeKind::Folder => {
             let child_parent_id = format!("{}/{}", parent_id, node.name);
-            egui::CollapsingHeader::new(&node.name)
+
+            let (folder_total, has_partial) = folder_disk_usage(&node.children, disk_usage);
+            let header_text = if folder_total > 0 {
+                let suffix = if has_partial && disk_usage_calculating {
+                    " …"
+                } else {
+                    ""
+                };
+                format!("{} [{}{}]", node.name, format_size(folder_total), suffix)
+            } else if disk_usage_calculating {
+                format!("{} […]", node.name)
+            } else {
+                node.name.clone()
+            };
+
+            egui::CollapsingHeader::new(&header_text)
+                .id_source(&child_parent_id)
                 .default_open(node.expanded)
                 .show(ui, |ui| {
                     for child in &mut node.children {
-                        show_node(ui, child, actions, selected_repo_id, &child_parent_id);
+                        show_node(
+                            ui,
+                            child,
+                            actions,
+                            selected_repo_id,
+                            &child_parent_id,
+                            disk_usage,
+                            disk_usage_calculating,
+                        );
                     }
                 });
         }
@@ -96,6 +123,11 @@ pub fn show_node(
                             ui.colored_label(egui::Color32::GRAY, "(status unavailable)");
                         }
                         Some(s) => show_badges(ui, s),
+                    }
+                    if let Some(&size) = disk_usage.get(local_path.as_path()) {
+                        ui.weak(format_size(size));
+                    } else if disk_usage_calculating {
+                        ui.weak("…");
                     }
                 } else {
                     ui.label("(not cloned)");
@@ -163,6 +195,43 @@ pub fn show_node(
                 }
             }
         }
+    }
+}
+
+fn folder_disk_usage(
+    children: &[TreeNode],
+    disk_usage: &HashMap<PathBuf, u64>,
+) -> (u64, bool) {
+    let mut total = 0u64;
+    let mut any_missing = false;
+    for child in children {
+        if let NodeKind::Repo {
+            local_path,
+            cloned: true,
+            ..
+        } = &child.kind
+        {
+            match disk_usage.get(local_path.as_path()) {
+                Some(&size) => total += size,
+                None => any_missing = true,
+            }
+        }
+    }
+    (total, any_missing)
+}
+
+fn format_size(bytes: u64) -> String {
+    const GIB: u64 = 1 << 30;
+    const MIB: u64 = 1 << 20;
+    const KIB: u64 = 1 << 10;
+    if bytes >= GIB {
+        format!("{:.1} GB", bytes as f64 / GIB as f64)
+    } else if bytes >= MIB {
+        format!("{:.1} MB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{:.1} KB", bytes as f64 / KIB as f64)
+    } else {
+        format!("{} B", bytes)
     }
 }
 

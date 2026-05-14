@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
 use crate::account_view::AccountWindow;
@@ -24,6 +26,7 @@ pub struct SubscriptionTree {
     pub nodes: Vec<TreeNode>,
     pub repos: puugit_core::config::ReposConfig,
     pub repos_toml_path: PathBuf,
+    pub disk_usage: HashMap<PathBuf, u64>,
 }
 
 pub struct PuugitApp {
@@ -40,6 +43,8 @@ pub struct PuugitApp {
     side_panel: SidePanel,
     sync_op: Option<SyncOp>,
     sync_message: Option<(bool, String)>,
+    disk_usage_receiver: Option<Receiver<(PathBuf, u64)>>,
+    disk_usage_target_sub: usize,
 }
 
 impl PuugitApp {
@@ -72,6 +77,8 @@ impl PuugitApp {
                     side_panel: SidePanel::new(),
                     sync_op: None,
                     sync_message: None,
+                    disk_usage_receiver: None,
+                    disk_usage_target_sub: 0,
                 }
             }
             Err(msg) => Self {
@@ -88,6 +95,8 @@ impl PuugitApp {
                 side_panel: SidePanel::new(),
                 sync_op: None,
                 sync_message: None,
+                disk_usage_receiver: None,
+                disk_usage_target_sub: 0,
             },
         }
     }
@@ -96,6 +105,39 @@ impl PuugitApp {
 impl eframe::App for PuugitApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_pixels_per_point(1.0);
+
+        // Poll disk usage calculation
+        {
+            let mut du_updates: Vec<(PathBuf, u64)> = Vec::new();
+            let mut du_done = false;
+            if let Some(rx) = &self.disk_usage_receiver {
+                loop {
+                    match rx.try_recv() {
+                        Ok(pair) => {
+                            du_updates.push(pair);
+                            ctx.request_repaint();
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Empty) => {
+                            ctx.request_repaint();
+                            break;
+                        }
+                        Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            du_done = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            let idx = self.disk_usage_target_sub;
+            if let Some(sub) = self.subscriptions.get_mut(idx) {
+                for (path, size) in du_updates {
+                    sub.disk_usage.insert(path, size);
+                }
+            }
+            if du_done {
+                self.disk_usage_receiver = None;
+            }
+        }
 
         // Poll running sync operation
         let sync_result = if let Some(op) = &self.sync_op {
@@ -142,6 +184,9 @@ impl eframe::App for PuugitApp {
             DialogAction::None => {}
             DialogAction::CloneSucceeded { local_path } => {
                 self.dialog = Dialog::None;
+                for sub in self.subscriptions.iter_mut() {
+                    sub.disk_usage.remove(&local_path);
+                }
                 refresh_all(&mut self.subscriptions, &local_path, true);
             }
             DialogAction::CloneDismissed => {
@@ -151,6 +196,9 @@ impl eframe::App for PuugitApp {
                 self.dialog = Dialog::None;
                 if let Err(e) = puugit_core::git_ops::remove_repo(&local_path) {
                     eprintln!("remove_repo failed: {e}");
+                }
+                for sub in self.subscriptions.iter_mut() {
+                    sub.disk_usage.remove(&local_path);
                 }
                 refresh_all(&mut self.subscriptions, &local_path, false);
             }
@@ -358,7 +406,25 @@ impl eframe::App for PuugitApp {
                         });
                     }
                 }
-                if syncing {
+                let du_calculating = self.disk_usage_receiver.is_some();
+                if ui
+                    .add_enabled(!du_calculating && has_sub, egui::Button::new("Disk Usage"))
+                    .clicked()
+                {
+                    let idx = self.selected_subscription;
+                    if let Some(sub) = self.subscriptions.get_mut(idx) {
+                        sub.disk_usage.clear();
+                    }
+                    if let Some(sub) = self.subscriptions.get(idx) {
+                        let paths = collect_cloned_paths(&sub.nodes);
+                        if !paths.is_empty() {
+                            self.disk_usage_receiver =
+                                Some(puugit_core::git_ops::calc_subscription_sizes(paths));
+                            self.disk_usage_target_sub = idx;
+                        }
+                    }
+                }
+                if syncing || self.disk_usage_receiver.is_some() {
                     ui.spinner();
                 }
             });
@@ -391,6 +457,9 @@ impl eframe::App for PuugitApp {
                 .unwrap_or_default();
             let selected_repo_id = self.selected_repo_id.clone();
 
+            let du_calculating = self.disk_usage_receiver.is_some()
+                && self.disk_usage_target_sub == self.selected_subscription;
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if let Some(sub) = self.subscriptions.get_mut(self.selected_subscription) {
                     for node in &mut sub.nodes {
@@ -400,6 +469,8 @@ impl eframe::App for PuugitApp {
                             &mut actions,
                             &selected_repo_id,
                             &sub_name,
+                            &sub.disk_usage,
+                            du_calculating,
                         );
                     }
                 }
@@ -631,6 +702,7 @@ fn load_subscription_tree(
         nodes: folder_nodes,
         repos,
         repos_toml_path: repos_toml,
+        disk_usage: HashMap::new(),
     })
 }
 
@@ -638,4 +710,24 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree>
     (0..local.subscriptions.len())
         .filter_map(|i| load_subscription_tree(local, i))
         .collect()
+}
+
+fn collect_cloned_paths(nodes: &[TreeNode]) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for node in nodes {
+        match &node.kind {
+            NodeKind::Repo {
+                local_path,
+                cloned: true,
+                ..
+            } => {
+                paths.push(local_path.clone());
+            }
+            NodeKind::Folder => {
+                paths.extend(collect_cloned_paths(&node.children));
+            }
+            _ => {}
+        }
+    }
+    paths
 }
