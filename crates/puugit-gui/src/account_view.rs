@@ -27,6 +27,7 @@ impl AccountWindow {
         config: &mut puugit_core::config::LocalConfig,
         selected_idx: usize,
         config_path: &Path,
+        repos_accounts: &[String],
     ) -> bool {
         if self.open && !self.was_open {
             self.ssh_aliases = puugit_core::ssh_config::parse_ssh_config()
@@ -45,6 +46,12 @@ impl AccountWindow {
             self.open = false;
             return false;
         };
+
+        let suggestions: Vec<&str> = repos_accounts
+            .iter()
+            .filter(|a| !sub.account_map.contains_key(a.as_str()))
+            .map(|s| s.as_str())
+            .collect();
 
         let title = format!("Account Map - {}", sub.name);
         let mut open = true;
@@ -136,6 +143,18 @@ impl AccountWindow {
                         }
                     }
                 });
+
+                if !suggestions.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.weak("From repos.toml:");
+                        for s in &suggestions {
+                            if ui.small_button(*s).clicked() {
+                                new_label.clear();
+                                new_label.push_str(s);
+                            }
+                        }
+                    });
+                }
             });
 
         self.open = open;

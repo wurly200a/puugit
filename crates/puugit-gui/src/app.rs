@@ -212,7 +212,12 @@ impl eframe::App for PuugitApp {
 
         if let (Some(config), Some(path)) = (&mut self.local_config, config_path.clone()) {
             let idx = self.selected_subscription;
-            if self.account_window.show(ctx, config, idx, &path) {
+            let repos_accounts = self
+                .subscriptions
+                .get(idx)
+                .map(|sub| collect_repos_accounts(&sub.repos))
+                .unwrap_or_default();
+            if self.account_window.show(ctx, config, idx, &path, &repos_accounts) {
                 needs_rebuild = true;
             }
         }
@@ -710,6 +715,20 @@ fn build_tree(local: &puugit_core::config::LocalConfig) -> Vec<SubscriptionTree>
     (0..local.subscriptions.len())
         .filter_map(|i| load_subscription_tree(local, i))
         .collect()
+}
+
+fn collect_repos_accounts(repos: &puugit_core::config::ReposConfig) -> Vec<String> {
+    let mut set = std::collections::HashSet::new();
+    for tree in &repos.tree {
+        for child in &tree.children {
+            if let Some(acc) = &child.account {
+                set.insert(acc.clone());
+            }
+        }
+    }
+    let mut v: Vec<String> = set.into_iter().collect();
+    v.sort();
+    v
 }
 
 fn collect_cloned_paths(nodes: &[TreeNode]) -> Vec<PathBuf> {
